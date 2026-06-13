@@ -1,0 +1,313 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  ayalab backend — VPC, RDS PostgreSQL (db.t3.micro), EC2 t2.micro.
+  All resources stay within the AWS free tier for 12 months.
+
+# ── Parameters ───────────────────────────────────────────────────────────────
+
+Parameters:
+  DBPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    Description: PostgreSQL master password (min 8 chars)
+
+  FrontendOrigin:
+    Type: String
+    Default: 'http://localhost:4200'
+    Description: CORS allowed origin (your frontend URL)
+
+  AppVersion:
+    Type: String
+    Default: '1.0.0'
+    Description: Version from pom.xml — determines the JAR filename
+
+  AssetsBucket:
+    Type: String
+    Description: S3 bucket name where the application JAR was uploaded
+
+# ── Resources ────────────────────────────────────────────────────────────────
+
+Resources:
+
+  # ── VPC ────────────────────────────────────────────────────────────────────
+
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: ayalab-vpc
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: ayalab-public
+
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: ayalab-private-a
+
+  PrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.3.0/24
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: ayalab-private-b
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: ayalab-igw
+
+  IGWAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: ayalab-public-rt
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: IGWAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetRouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  # ── Security groups ────────────────────────────────────────────────────────
+
+  EC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: EC2 — SSH and backend API
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+          Description: SSH
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: 0.0.0.0/0
+          Description: Backend API
+      Tags:
+        - Key: Name
+          Value: ayalab-ec2-sg
+
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: RDS — PostgreSQL reachable from EC2 only
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref EC2SecurityGroup
+          Description: PostgreSQL from EC2
+      Tags:
+        - Key: Name
+          Value: ayalab-rds-sg
+
+  # ── RDS PostgreSQL ─────────────────────────────────────────────────────────
+
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: ayalab RDS subnet group
+      SubnetIds:
+        - !Ref PrivateSubnetA
+        - !Ref PrivateSubnetB
+
+  RDSInstance:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      DBInstanceIdentifier: ayalab-postgres
+      DBName: ayalab
+      Engine: postgres
+      EngineVersion: '16'
+      DBInstanceClass: db.t3.micro
+      AllocatedStorage: '20'
+      StorageType: gp2
+      MasterUsername: ayalab
+      MasterUserPassword: !Ref DBPassword
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      VPCSecurityGroups:
+        - !Ref RDSSecurityGroup
+      PubliclyAccessible: false
+      BackupRetentionPeriod: 0
+      DeletionProtection: false
+
+  # ── IAM role for EC2 ───────────────────────────────────────────────────────
+
+  EC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: ReadJarFromS3
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub 'arn:aws:s3:::${AssetsBucket}/*'
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref EC2Role
+
+  # ── SSH key pair — private key stored in SSM Parameter Store ──────────────
+
+  KeyPair:
+    Type: AWS::EC2::KeyPair
+    Properties:
+      KeyName: ayalab-key
+
+  # ── EC2 instance (t2.micro — free tier) ───────────────────────────────────
+
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    DependsOn: RDSInstance
+    Properties:
+      InstanceType: t2.micro
+      # Resolves to the latest Ubuntu 24.04 LTS AMI at deploy time
+      ImageId: '{{resolve:ssm:/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id}}'
+      SubnetId: !Ref PublicSubnet
+      SecurityGroupIds:
+        - !Ref EC2SecurityGroup
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      KeyName: !Ref KeyPair
+      UserData:
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash
+            set -e
+
+            # Install Java 17 and AWS CLI
+            apt-get update -y
+            apt-get install -y openjdk-17-jre-headless awscli
+
+            # Download JAR from S3
+            mkdir -p /opt/ayalab
+            aws s3 cp s3://${AssetsBucket}/aya-lab-backend-${AppVersion}.jar \
+              /opt/ayalab/app.jar \
+              --region ${AWS::Region}
+
+            # Write environment file (not in systemd unit to avoid leaking in ps output)
+            mkdir -p /etc/ayalab
+            cat > /etc/ayalab/env << 'ENVEOF'
+            DB_URL=jdbc:postgresql://${RDSInstance.Endpoint.Address}:5432/ayalab
+            DB_USERNAME=ayalab
+            DB_PASSWORD=${DBPassword}
+            FRONTEND_ORIGIN=${FrontendOrigin}
+            ENVEOF
+            chmod 600 /etc/ayalab/env
+
+            # Create systemd service
+            cat > /etc/systemd/system/ayalab.service << 'SVCEOF'
+            [Unit]
+            Description=Ayalab Backend
+            After=network.target
+
+            [Service]
+            EnvironmentFile=/etc/ayalab/env
+            ExecStart=/usr/bin/java -jar /opt/ayalab/app.jar
+            Restart=always
+            RestartSec=5
+            StandardOutput=journal
+            StandardError=journal
+
+            [Install]
+            WantedBy=multi-user.target
+            SVCEOF
+
+            systemctl daemon-reload
+            systemctl enable --now ayalab
+      Tags:
+        - Key: Name
+          Value: ayalab-backend
+
+  # ── Elastic IP — static address that survives reboots ─────────────────────
+
+  ElasticIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      InstanceId: !Ref EC2Instance
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: ayalab-eip
+
+# ── Outputs ──────────────────────────────────────────────────────────────────
+
+Outputs:
+  BackendUrl:
+    Description: Backend API URL
+    Value: !Sub 'http://${ElasticIP}:8080'
+
+  RDSEndpoint:
+    Description: RDS PostgreSQL endpoint (private, reachable from EC2 only)
+    Value: !GetAtt RDSInstance.Endpoint.Address
+
+  RetrieveSshKey:
+    Description: Command to download the SSH private key from SSM
+    Value: !Sub >-
+      aws ssm get-parameter
+      --name /ec2/keypair/${KeyPair.KeyPairId}
+      --with-decryption
+      --query Parameter.Value
+      --output text
+      > ayalab-key.pem && chmod 400 ayalab-key.pem
+
+  SshCommand:
+    Description: SSH into the EC2 instance
+    Value: !Sub 'ssh -i ayalab-key.pem ubuntu@${ElasticIP}'

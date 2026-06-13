@@ -1,0 +1,33 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ayalab
+      POSTGRES_USER: ayalab
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-ayalab}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ayalab"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    image: ayalab-backend:latest
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/ayalab
+      DB_USERNAME: ayalab
+      DB_PASSWORD: ${DB_PASSWORD:-ayalab}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:4200}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

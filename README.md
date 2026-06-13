@@ -1,138 +1,117 @@
-# Pointer Lab — Backend
+# ayalab — Backend
 
-Spring Boot 3.5 (Java 17) REST API + PostgreSQL. Serves the problem list/detail endpoints and runs JavaScript submissions in a sandboxed GraalVM engine.
+REST API powering an interactive coding practice platform.
+
+## Contents
+
+- [What it does](#what-it-does)
+- [Architecture](#architecture)
+- [Tech stack and why](#tech-stack-and-why)
+- [Key design decisions](#key-design-decisions)
+- [API surface](#api-surface)
+- [Running locally in 2 commands](#running-locally-in-2-commands) Users browse algorithm problems, write JavaScript solutions in the browser, and get immediate pass/fail feedback with per-test-case results — all evaluated server-side in a sandboxed engine.
 
 ---
 
-## Prerequisites
+## What it does
 
-| Tool     | Version     | Check              |
-|----------|-------------|--------------------|
-| Java JDK | 17 or newer | `java -version`    |
-| Maven    | 3.9 or newer| `mvn -version`     |
-| Docker   | any         | `docker --version` |
+| Capability | Detail |
+|---|---|
+| Problem catalogue | Filterable by difficulty, topic tag, and solve status |
+| Code execution | Runs user-submitted JavaScript against hidden test cases |
+| Sandboxed judging | GraalVM JS isolates each submission — no `eval`, no Node.js process spawn |
+| Schema management | Flyway versioned migrations; schema and seed data applied automatically on boot |
+| Containerised | Single Dockerfile; full stack via Docker Compose or Kubernetes manifests |
+| Cloud-ready | Terraform config provisions EC2 + RDS on AWS free tier in one command |
 
 ---
 
-## Local development
+## Architecture
 
-### 1. Start PostgreSQL
-
-```bash
-kubectl apply -f k8s/namespace.yaml
-kubectl apply -f k8s/postgres-secret.yaml
-kubectl apply -f k8s/postgres-pvc.yaml
-kubectl apply -f k8s/postgres-deployment.yaml
-kubectl apply -f k8s/postgres-service.yaml
+```
+Browser (Angular)
+      │  HTTP /api/*
+      ▼
+┌─────────────────────────────────┐
+│  Spring Boot 3.5  (port 8080)   │
+│                                 │
+│  ProblemController              │
+│  SubmissionController           │
+│       │                         │
+│  ProblemService                 │
+│  SubmissionService              │
+│       │            │            │
+│  ProblemRepository  JavaScriptJudge  │
+│  (Spring Data JPA)  (GraalVM JS)│
+└────────┬────────────────────────┘
+         │ JDBC
+         ▼
+   PostgreSQL 16
+   (Flyway migrations)
 ```
 
-Or run Postgres any other way — defaults the app expects:
+---
 
-- database: `pointerlab`
-- user: `pointerlab`
-- password: `pointerlab`
-- port: `5432`
+## Tech stack and why
 
-Override with env vars at runtime (no code change needed):
+| Layer | Choice | Rationale |
+|---|---|---|
+| Framework | Spring Boot 3.5 | Production-grade, minimal boilerplate, first-class JPA + validation |
+| Language | Java 17 | LTS, records, sealed types, virtual threads ready |
+| Database | PostgreSQL 16 | JSONB support for test cases, strong array ops for tag queries |
+| ORM | Spring Data JPA | Removes repository boilerplate; custom `@Query` where needed |
+| Migrations | Flyway | SQL-first, deterministic versioning, runs on startup with no extra tooling |
+| JS sandbox | GraalVM JS (GraalJS 23.1) | Runs user code inside a restricted `Context` — no filesystem, no network, timeout enforced |
+| Build | Maven 3.9 | Stable, IDE-friendly, reproducible builds |
+| Container | Docker / Podman | Identical image for local dev and production |
+| Orchestration | Kubernetes | Manifests included for cluster deployments |
+| IaC | Terraform | Reproducible AWS infra (VPC, EC2, RDS) in code; `terraform destroy` leaves no orphaned resources |
+
+---
+
+## Key design decisions
+
+**GraalVM JS over a Node.js subprocess**
+Spawning a child process per submission adds OS overhead, complicates timeouts, and opens shell-injection vectors. GraalVM JS runs in-process inside a `Context` with `allowAllAccess(false)` — no threads, no I/O, no escape from the sandbox. Execution time is capped before the context is disposed.
+
+**Flyway over Hibernate DDL auto**
+`spring.jpa.hibernate.ddl-auto=validate` means Hibernate only checks the schema — it never mutates it. Flyway owns every structural change through numbered migration scripts that are reviewed, committed, and applied in order. No surprise table drops in production.
+
+**Records for DTOs**
+`ProblemSummary`, `ProblemDetail`, `SubmitRequest`, and `SubmitResult` are Java records — immutable, no boilerplate, serialise cleanly with Jackson.
+
+**Environment-variable-first config**
+Every sensitive value (`DB_URL`, `DB_PASSWORD`, `FRONTEND_ORIGIN`) is read from environment variables with safe local defaults in `application.properties`. No secrets in code or config files.
+
+---
+
+## API surface
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/api/problems` | List problems — filter by `difficulty`, `status`, `tag`, `search` |
+| `GET` | `/api/problems/tags` | All distinct topic tags |
+| `GET` | `/api/problems/{slug}` | Full problem detail with description and starter code |
+| `POST` | `/api/problems/{slug}/submit` | Run a JS solution; returns pass/fail per test case |
+
+Interactive docs and live request testing: `http://localhost:8080/swagger-ui.html`
+
+---
+
+## Running locally in 2 commands
 
 ```bash
-DB_URL=jdbc:postgresql://localhost:5432/pointerlab \
-DB_USERNAME=myuser \
-DB_PASSWORD=mypass \
+# 1. Start Postgres
+docker run -d --name ayalab-pg -e POSTGRES_DB=ayalab \
+  -e POSTGRES_USER=ayalab -e POSTGRES_PASSWORD=ayalab \
+  -p 5432:5432 postgres:16
+
+# 2. Start the API (Flyway migrations run automatically)
 mvn spring-boot:run
 ```
 
-Flyway applies schema + seed data automatically on first start.
+API available at `http://localhost:8080`.
 
-### 2. Run the API
+Full local setup, API reference, and environment variables: **[DEVELOPMENT.md](DEVELOPMENT.md)**
 
-```bash
-mvn spring-boot:run
-```
-
-API available at **http://localhost:8080**.
-
-```bash
-curl http://localhost:8080/api/problems | head
-```
-
----
-
-## API endpoints
-
-| Method | Path                          | Purpose                           |
-|--------|-------------------------------|-----------------------------------|
-| GET    | `/api/problems`               | List problems (filterable)        |
-| GET    | `/api/problems/tags`          | Distinct topic tags               |
-| GET    | `/api/problems/{slug}`        | Full problem detail               |
-| POST   | `/api/problems/{slug}/submit` | Run/submit a JavaScript solution  |
-
-`GET /api/problems` query params (all optional): `difficulty`, `status`, `search`, `tag`.
-
----
-
-## Build Docker image
-
-```bash
-mvn package -DskipTests
-docker build -t pointer-lab-backend:latest .
-```
-
----
-
-## Deploy to Kubernetes
-
-```bash
-kubectl apply -f k8s/namespace.yaml
-kubectl apply -f k8s/postgres-secret.yaml
-kubectl apply -f k8s/postgres-pvc.yaml
-kubectl apply -f k8s/postgres-deployment.yaml
-kubectl apply -f k8s/postgres-service.yaml
-kubectl apply -f k8s/backend-deployment.yaml
-kubectl apply -f k8s/backend-service.yaml
-```
-
-The backend `Service` is `ClusterIP` — exposed externally via the frontend's Ingress at `/api`.
-
----
-
-## Environment variables
-
-| Variable          | Default                                        | Purpose              |
-|-------------------|------------------------------------------------|----------------------|
-| `DB_URL`          | `jdbc:postgresql://localhost:5432/pointerlab`  | JDBC connection URL  |
-| `DB_USERNAME`     | `pointerlab`                                   | DB user              |
-| `DB_PASSWORD`     | `pointerlab`                                   | DB password          |
-| `SERVER_PORT`     | `8080`                                         | HTTP port            |
-| `FRONTEND_ORIGIN` | `http://localhost:4200`                        | CORS allowed origin  |
-
----
-
-## Project layout
-
-```
-pointer-lab-backend/
-├── Dockerfile
-├── pom.xml
-├── k8s/
-│   ├── namespace.yaml
-│   ├── postgres-secret.yaml
-│   ├── postgres-pvc.yaml
-│   ├── postgres-deployment.yaml
-│   ├── postgres-service.yaml
-│   ├── backend-deployment.yaml
-│   └── backend-service.yaml
-└── src/main/
-    ├── java/com/pointerlab/
-    │   ├── PointerLabApplication.java
-    │   ├── config/          # CORS
-    │   ├── controller/      # REST endpoints
-    │   ├── dto/             # request/response records
-    │   ├── entity/          # JPA entities + enums
-    │   ├── repository/      # Spring Data JPA
-    │   ├── service/         # business logic
-    │   └── judge/           # GraalVM JS sandbox
-    └── resources/
-        ├── application.properties
-        └── db/migration/    # Flyway V1 schema + V2 seed
-```
+Deploying to a server or cloud (Docker Compose, Kubernetes, Terraform, CloudFormation, CDK, Hetzner): **[DEPLOYMENT.md](DEPLOYMENT.md)**
