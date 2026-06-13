@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ayalab-backend
+  namespace: ayalab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ayalab-backend
+  template:
+    metadata:
+      labels:
+        app: ayalab-backend
+    spec:
+      containers:
+        - name: ayalab-backend
+          image: ayalab-backend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: DB_URL
+              value: jdbc:postgresql://postgres:5432/ayalab
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+            - name: FRONTEND_ORIGIN
+              value: http://localhost
+          readinessProbe:
+            httpGet:
+              path: /api/problems
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
