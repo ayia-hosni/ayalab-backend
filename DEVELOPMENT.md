@@ -1,12 +1,16 @@
 # Development Guide
 
-Local setup, API reference, and project structure.
-For deploying to a server or cloud, see [DEPLOYMENT.md](DEPLOYMENT.md).
+Reference for the API, environment variables, and project structure.
+
+| Guide | What's in it |
+|---|---|
+| [RUNNING_LOCALLY.md](RUNNING_LOCALLY.md) | Step-by-step local setup (Java, Maven, Docker/Podman, Swagger, troubleshooting) |
+| [DEPLOYMENT.md](DEPLOYMENT.md) | Deploy to a server or cloud (Docker Compose, Kubernetes, AWS, Hetzner) |
 
 ## Contents
 
 - [Prerequisites](#prerequisites)
-- [Running locally](#running-locally)
+- [Quick start](#quick-start)
 - [API reference](#api-reference)
 - [Swagger UI](#swagger-ui)
 - [Environment variables](#environment-variables)
@@ -22,68 +26,24 @@ For deploying to a server or cloud, see [DEPLOYMENT.md](DEPLOYMENT.md).
 | Maven            | 3.9 or newer   | `mvn -version`                          |
 | Docker or Podman | any (optional) | `docker --version` / `podman --version` |
 
+See [RUNNING_LOCALLY.md](RUNNING_LOCALLY.md) for installation instructions for each tool.
+
 ---
 
-## Running locally
-
-### Step 1 — Start PostgreSQL
-
-**Option A — Docker / Podman:**
+## Quick start
 
 ```bash
-docker run -d \
-  --name ayalab-postgres \
-  -e POSTGRES_DB=ayalab \
-  -e POSTGRES_USER=ayalab \
-  -e POSTGRES_PASSWORD=ayalab \
-  -p 5432:5432 \
-  postgres:16
-```
+# 1. Start PostgreSQL
+docker run -d --name ayalab-postgres \
+  -e POSTGRES_DB=ayalab -e POSTGRES_USER=ayalab -e POSTGRES_PASSWORD=ayalab \
+  -p 5432:5432 postgres:16
 
-**Option B — Kubernetes (minikube / kind):**
-
-```bash
-kubectl apply -f k8s/namespace.yaml
-kubectl apply -f k8s/postgres-secret.yaml
-kubectl apply -f k8s/postgres-pvc.yaml
-kubectl apply -f k8s/postgres-deployment.yaml
-kubectl apply -f k8s/postgres-service.yaml
-```
-
-Default connection the app expects:
-
-| Setting  | Value    |
-|----------|----------|
-| Host     | `localhost` |
-| Port     | `5432`   |
-| Database | `ayalab` |
-| User     | `ayalab` |
-| Password | `ayalab` |
-
-Flyway runs schema + seed migrations automatically on first start — no manual step needed.
-
-### Step 2 — Start the API
-
-```bash
+# 2. Start the API (Flyway migrations run automatically)
 mvn spring-boot:run
 ```
 
-Override DB connection without touching any file:
-
-```bash
-DB_URL=jdbc:postgresql://localhost:5432/mydb \
-DB_USERNAME=myuser \
-DB_PASSWORD=mypass \
-mvn spring-boot:run
-```
-
-API available at **http://localhost:8080**.
-
-Smoke test:
-
-```bash
-curl http://localhost:8080/api/problems | jq '.[0]'
-```
+API available at `http://localhost:8080`.
+Full setup options and troubleshooting: [RUNNING_LOCALLY.md](RUNNING_LOCALLY.md).
 
 ---
 
@@ -111,7 +71,9 @@ All params are optional and combinable.
 
 ```json
 {
-  "code": "function solution(arr) { return arr.reverse(); }"
+  "language": "javascript",
+  "code": "function solution(arr) { return arr.reverse(); }",
+  "submit": false
 }
 ```
 
@@ -120,10 +82,12 @@ All params are optional and combinable.
 ```json
 {
   "accepted": true,
-  "passedCount": 5,
-  "totalCount": 5,
-  "runtime": "12ms",
-  "error": null
+  "verdict": "ACCEPTED",
+  "compileError": null,
+  "runtimeMs": 12,
+  "cases": [
+    { "passed": true, "input": [1,2], "expected": [2,1], "actual": [2,1], "error": null }
+  ]
 }
 ```
 
@@ -131,14 +95,10 @@ All params are optional and combinable.
 
 ## Swagger UI
 
-When the API is running, interactive documentation is available at:
-
 | URL | Description |
 |-----|-------------|
-| `http://localhost:8080/swagger-ui.html` | Swagger UI — browse and try every endpoint |
-| `http://localhost:8080/v3/api-docs` | Raw OpenAPI JSON spec |
-
-All request/response schemas, filter parameters, and example values are documented inline. No external tool needed.
+| `http://localhost:8080/swagger-ui.html` | Interactive UI — browse and execute every endpoint |
+| `http://localhost:8080/v3/api-docs`     | Raw OpenAPI JSON spec (import into Postman / Insomnia) |
 
 ---
 
@@ -168,7 +128,7 @@ aya-lab-backend/
 └── src/main/
     ├── java/com/ayalab/
     │   ├── AyaLabApplication.java
-    │   ├── config/             # CORS
+    │   ├── config/             # CORS + OpenAPI config
     │   ├── controller/         # REST endpoints + exception handler
     │   ├── dto/                # Request/response records
     │   ├── entity/             # JPA entities and enums

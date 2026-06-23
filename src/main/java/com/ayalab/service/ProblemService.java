@@ -7,6 +7,7 @@ import com.ayalab.entity.Problem;
 import com.ayalab.entity.ProblemStatus;
 import com.ayalab.repository.ProblemRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -30,6 +31,7 @@ public class ProblemService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
     public Optional<ProblemDetail> getBySlug(String slug) {
         return repository.findBySlug(slug).map(ProblemDetail::from);
     }

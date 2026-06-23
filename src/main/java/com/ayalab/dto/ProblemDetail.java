@@ -4,6 +4,7 @@ import com.ayalab.entity.Problem;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.List;
+import java.util.Map;
 
 @Schema(description = "Full problem payload including description and starter code")
 public record ProblemDetail(
@@ -16,7 +17,7 @@ public record ProblemDetail(
         @Schema(description = "Topic tags", example = "[\"Array\", \"Hash Table\"]") List<String> tags,
         @Schema(description = "Whether a step-by-step visualizer is available") boolean hasVisualizer,
         @Schema(description = "Full problem description in Markdown") String description,
-        @Schema(description = "Starter code shown to the user in the editor") String starterCode
+        @Schema(description = "Starter code per language, e.g. {\"javascript\":\"…\"}") Map<String, String> starterCode
 ) {
     public static ProblemDetail from(Problem p) {
         return new ProblemDetail(
@@ -27,9 +28,9 @@ public record ProblemDetail(
                 p.getDifficulty().name().toLowerCase(),
                 p.getStatus().name().toLowerCase(),
                 List.copyOf(p.getTags()),
-                p.isHasVisualizer(),
+                p.getVisualizerType() != null,
                 p.getDescription(),
-                p.getStarterCode()
+                Map.copyOf(p.getStarterCode())
         );
     }
 }

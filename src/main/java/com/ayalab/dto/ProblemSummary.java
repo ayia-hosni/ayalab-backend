@@ -14,7 +14,8 @@ public record ProblemSummary(
         @Schema(description = "Difficulty level", allowableValues = {"easy", "medium", "hard"}) String difficulty,
         @Schema(description = "Solve status", allowableValues = {"todo", "attempted", "solved"}) String status,
         @Schema(description = "Topic tags", example = "[\"Array\", \"Hash Table\"]") List<String> tags,
-        @Schema(description = "Whether a step-by-step visualizer is available") boolean hasVisualizer
+        @Schema(description = "Whether a step-by-step visualizer is available") boolean hasVisualizer,
+        @Schema(description = "Whether this problem is fully implemented; false means Coming Soon") boolean available
 ) {
     public static ProblemSummary from(Problem p) {
         return new ProblemSummary(
@@ -25,7 +26,8 @@ public record ProblemSummary(
                 p.getDifficulty().name().toLowerCase(),
                 p.getStatus().name().toLowerCase(),
                 List.copyOf(p.getTags()),
-                p.isHasVisualizer()
+                p.getVisualizerType() != null,
+                p.isAvailable()
         );
     }
 }

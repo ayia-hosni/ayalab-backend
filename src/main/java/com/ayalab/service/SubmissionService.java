@@ -4,9 +4,13 @@ import com.ayalab.dto.SubmitRequest;
 import com.ayalab.dto.SubmitResult;
 import com.ayalab.entity.Problem;
 import com.ayalab.entity.ProblemStatus;
+import com.ayalab.entity.ProblemTestCase;
 import com.ayalab.judge.JavaScriptJudge;
 import com.ayalab.judge.TestCase;
 import com.ayalab.repository.ProblemRepository;
+import com.ayalab.repository.ProblemTestCaseRepository;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -16,24 +20,21 @@ public class SubmissionService {
 
     private final JavaScriptJudge judge;
     private final ProblemRepository problemRepository;
+    private final ProblemTestCaseRepository testCaseRepository;
     private final ProblemService problemService;
+    private final ObjectMapper objectMapper;
 
     public SubmissionService(JavaScriptJudge judge,
                              ProblemRepository problemRepository,
-                             ProblemService problemService) {
+                             ProblemTestCaseRepository testCaseRepository,
+                             ProblemService problemService,
+                             ObjectMapper objectMapper) {
         this.judge = judge;
         this.problemRepository = problemRepository;
+        this.testCaseRepository = testCaseRepository;
         this.problemService = problemService;
+        this.objectMapper = objectMapper;
     }
-
-    /** Hidden test cases for Reverse Linked List (problem 206). */
-    private static final List<TestCase> REVERSE_LINKED_LIST_TESTS = List.of(
-            new TestCase(List.of(1, 2, 3, 4, 5), List.of(5, 4, 3, 2, 1)),
-            new TestCase(List.of(1, 2), List.of(2, 1)),
-            new TestCase(List.of(), List.of()),
-            new TestCase(List.of(7), List.of(7)),
-            new TestCase(List.of(-3, 0, 9, -1), List.of(-1, 9, 0, -3))
-    );
 
     public SubmitResult submit(String slug, SubmitRequest request) {
         Problem problem = problemRepository.findBySlug(slug)
@@ -46,13 +47,17 @@ public class SubmissionService {
                     0, List.of());
         }
 
-        List<TestCase> all = testsFor(slug);
-        // "Run" uses the first 3 sample cases; "Submit" runs everything.
-        List<TestCase> cases = request.submit() ? all : all.subList(0, Math.min(3, all.size()));
+        List<ProblemTestCase> rawCases = testCaseRepository.findByProblemIdOrderByOrdinal(problem.getId());
+        // "Run" executes only sample cases (those shown in examples); "Submit" runs all.
+        List<TestCase> cases = (request.submit()
+                ? rawCases
+                : rawCases.stream().filter(ProblemTestCase::isSample).toList())
+                .stream()
+                .map(this::toTestCase)
+                .toList();
 
         SubmitResult result = judge.run(request.code(), cases);
 
-        // Update solve status based on the outcome.
         if (result.accepted() && request.submit()) {
             problemService.updateStatus(problem.getId(), ProblemStatus.SOLVED);
         } else if (result.compileError() == null) {
@@ -62,9 +67,13 @@ public class SubmissionService {
         return result;
     }
 
-    private List<TestCase> testsFor(String slug) {
-        // A real system would load these from the DB per problem; we ship the
-        // Reverse Linked List set since that is the fully playable problem.
-        return REVERSE_LINKED_LIST_TESTS;
+    private TestCase toTestCase(ProblemTestCase tc) {
+        try {
+            List<Integer> input  = objectMapper.readValue(tc.getInputJson(),  new TypeReference<>() {});
+            List<Integer> output = objectMapper.readValue(tc.getOutputJson(), new TypeReference<>() {});
+            return new TestCase(input, output);
+        } catch (Exception e) {
+            throw new IllegalStateException("Malformed test-case JSON for case id=" + tc.getId(), e);
+        }
     }
 }

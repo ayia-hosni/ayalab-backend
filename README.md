@@ -112,6 +112,8 @@ mvn spring-boot:run
 
 API available at `http://localhost:8080`.
 
-Full local setup, API reference, and environment variables: **[DEVELOPMENT.md](DEVELOPMENT.md)**
-
-Deploying to a server or cloud (Docker Compose, Kubernetes, Terraform, CloudFormation, CDK, Hetzner): **[DEPLOYMENT.md](DEPLOYMENT.md)**
+| Guide | Content |
+|---|---|
+| [RUNNING_LOCALLY.md](RUNNING_LOCALLY.md) | Full local setup, options, Swagger, troubleshooting |
+| [DEVELOPMENT.md](DEVELOPMENT.md) | API reference, env vars, project layout |
+| [DEPLOYMENT.md](DEPLOYMENT.md) | Docker Compose, Kubernetes, AWS, Hetzner |

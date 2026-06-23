@@ -9,9 +9,12 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.MapKeyColumn;
 import jakarta.persistence.Table;
 
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 
 @Entity
@@ -49,13 +52,21 @@ public class Problem {
     @Column(columnDefinition = "text")
     private String description;
 
-    /** Whether this problem supports the in-browser pointer-trace visualizer. */
-    @Column(nullable = false)
-    private boolean hasVisualizer = false;
+    /** Identifies which interactive visualizer to show; null means none.
+     *  Known values: 'POINTER_TRACE'. Extensible without a schema change. */
+    @Column(name = "visualizer_type")
+    private String visualizerType;
 
-    /** Starter code keyed by language (javascript/python/java), stored as JSON text. */
-    @Column(columnDefinition = "text")
-    private String starterCode;
+    /** Starter code per language, backed by the problem_starter_code table. */
+    @ElementCollection(fetch = FetchType.LAZY)
+    @CollectionTable(name = "problem_starter_code", joinColumns = @JoinColumn(name = "problem_id"))
+    @MapKeyColumn(name = "language")
+    @Column(name = "code", columnDefinition = "text")
+    private Map<String, String> starterCode = new LinkedHashMap<>();
+
+    /** Whether this problem is fully implemented and navigable. False = "Coming Soon". */
+    @Column(nullable = false)
+    private boolean available = false;
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -81,9 +92,12 @@ public class Problem {
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
 
-    public boolean isHasVisualizer() { return hasVisualizer; }
-    public void setHasVisualizer(boolean hasVisualizer) { this.hasVisualizer = hasVisualizer; }
+    public String getVisualizerType() { return visualizerType; }
+    public void setVisualizerType(String visualizerType) { this.visualizerType = visualizerType; }
 
-    public String getStarterCode() { return starterCode; }
-    public void setStarterCode(String starterCode) { this.starterCode = starterCode; }
+    public Map<String, String> getStarterCode() { return starterCode; }
+    public void setStarterCode(Map<String, String> starterCode) { this.starterCode = starterCode; }
+
+    public boolean isAvailable() { return available; }
+    public void setAvailable(boolean available) { this.available = available; }
 }
