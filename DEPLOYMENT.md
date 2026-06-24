@@ -366,6 +366,8 @@ cdk destroy
 
 Cheapest long-term option. €3.29/mo for a `CAX11` (ARM, 2 vCPU, 4 GB RAM).
 
+> **Automated deploys:** see [CI_CD.md](CI_CD.md) to set up GitHub Actions so every push to `main` redeploys automatically.
+
 **Step 1 — Create the server:**
 
 1. Sign up at [hetzner.com/cloud](https://www.hetzner.com/cloud) → New project → Add Server

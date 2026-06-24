@@ -6,6 +6,7 @@ Reference for the API, environment variables, and project structure.
 |---|---|
 | [RUNNING_LOCALLY.md](RUNNING_LOCALLY.md) | Step-by-step local setup (Java, Maven, Docker/Podman, Swagger, troubleshooting) |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Deploy to a server or cloud (Docker Compose, Kubernetes, AWS, Hetzner) |
+| [CI_CD.md](CI_CD.md) | GitHub Actions → Hetzner VPS automated deploys |
 
 ## Contents
 
