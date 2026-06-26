@@ -15,8 +15,8 @@ spec:
     spec:
       containers:
         - name: ayalab-backend
-          image: ayalab-backend:latest
-          imagePullPolicy: IfNotPresent
+          image: ayahosny/ayalab-backend:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080
           env:
