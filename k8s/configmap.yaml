@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ayalab-config
+  namespace: ayalab
+data:
+  FRONTEND_ORIGIN: "https://your-frontend-domain.com"

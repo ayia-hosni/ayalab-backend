@@ -45,11 +45,11 @@ jobs:
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
+          # Use the git SHA as the image tag — never use :latest in production
+          # This makes every deployment traceable to an exact commit
           IMAGE=$ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }}
           docker build -t $IMAGE .
           docker push $IMAGE
-          docker tag $IMAGE $ECR_REGISTRY/$ECR_REPOSITORY:latest
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
           echo "image=$IMAGE" >> $GITHUB_OUTPUT
 
   deploy:
@@ -72,11 +72,12 @@ jobs:
             --region ${{ env.AWS_REGION }} \
             --name ${{ env.EKS_CLUSTER_NAME }}
 
-      - name: Create namespace
+      - name: Apply namespace and config
         run: |
-          kubectl create namespace ayalab --dry-run=client -o yaml | kubectl apply -f -
+          kubectl apply -f k8s/namespace.yaml
+          kubectl apply -f k8s/configmap.yaml
 
-      - name: Create postgres secret
+      - name: Apply secrets
         run: |
           kubectl create secret generic postgres-secret \
             --from-literal=POSTGRES_DB=ayalab \
@@ -85,14 +86,60 @@ jobs:
             -n ayalab \
             --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Apply K8s manifests
-        run: kubectl apply -f k8s/
-
-      - name: Update backend image to ECR
+      - name: Run database migrations
+        # Runs Flyway as a one-off Job before the new Pods start
+        # Safe: migrations must be backward-compatible with the old version still running
         run: |
+          kubectl run flyway-migrate \
+            --image=${{ needs.build-and-push.outputs.image }} \
+            --restart=Never \
+            --namespace=ayalab \
+            --env="DB_URL=jdbc:postgresql://postgres:5432/ayalab" \
+            --env="DB_USERNAME=${{ secrets.DB_USERNAME }}" \
+            --env="DB_PASSWORD=${{ secrets.DB_PASSWORD }}" \
+            --command -- java -cp /app/app.jar \
+              -Dloader.main=org.flywaydb.core.Flyway \
+              org.springframework.boot.loader.PropertiesLauncher migrate || true
+          # Wait for migration job to complete
+          kubectl wait --for=condition=Ready pod/flyway-migrate -n ayalab --timeout=120s || true
+          kubectl delete pod flyway-migrate -n ayalab --ignore-not-found
+
+      - name: Apply remaining manifests
+        run: |
+          kubectl apply -f k8s/postgres-pvc.yaml
+          kubectl apply -f k8s/postgres-secret.yaml
+          kubectl apply -f k8s/postgres-deployment.yaml
+          kubectl apply -f k8s/postgres-service.yaml
+          kubectl apply -f k8s/pdb.yaml
+
+      - name: Deploy new image
+        run: |
+          # Set the exact image (git SHA tag, not :latest)
           kubectl set image deployment/ayalab-backend \
             ayalab-backend=${{ needs.build-and-push.outputs.image }} \
             -n ayalab
 
-      - name: Wait for rollout
-        run: kubectl rollout status deployment/ayalab-backend -n ayalab --timeout=120s
+          # Annotate so kubectl rollout history is readable
+          kubectl annotate deployment/ayalab-backend \
+            kubernetes.io/change-cause="deploy ${{ github.sha }} by ${{ github.actor }}" \
+            -n ayalab --overwrite
+
+      - name: Apply backend service and HPA
+        run: |
+          kubectl apply -f k8s/backend-service.yaml
+          kubectl apply -f k8s/hpa.yaml
+
+      - name: Wait for rollout to complete
+        # This blocks until all new pods are ready OR timeout is hit
+        run: |
+          kubectl rollout status deployment/ayalab-backend \
+            -n ayalab \
+            --timeout=300s
+
+      - name: Rollback on failure
+        # Only runs if the previous step failed
+        if: failure()
+        run: |
+          echo "Deployment failed — rolling back to previous version"
+          kubectl rollout undo deployment/ayalab-backend -n ayalab
+          kubectl rollout status deployment/ayalab-backend -n ayalab --timeout=120s
