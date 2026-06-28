@@ -15,6 +15,19 @@ resource "aws_subnet" "public" {
   tags = { Name = "ayalab-public" }
 }
 
+resource "aws_subnet" "public_b" {
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = "10.0.4.0/24"
+  availability_zone       = "${var.aws_region}b"
+  map_public_ip_on_launch = true
+  tags = { Name = "ayalab-public-b" }
+}
+
+resource "aws_route_table_association" "public_b" {
+  subnet_id      = aws_subnet.public_b.id
+  route_table_id = aws_route_table.public.id
+}
+
 # ── Private subnets (RDS needs two AZs for the subnet group) ──────────────────
 
 resource "aws_subnet" "private_a" {

@@ -3,19 +3,28 @@ kind: Deployment
 metadata:
   name: ayalab-backend
   namespace: ayalab
+  annotations:
+    # Enables automatic rollback tracking in CI
+    kubernetes.io/change-cause: "image updated via CI"
 spec:
-  replicas: 1
+  replicas: 3
   selector:
     matchLabels:
       app: ayalab-backend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0   # never kill old pod before new one is ready
+      maxSurge: 1         # allow 1 extra pod during the rollout
   template:
     metadata:
       labels:
         app: ayalab-backend
     spec:
+      terminationGracePeriodSeconds: 60  # give Spring Boot time to finish in-flight requests
       containers:
         - name: ayalab-backend
-          image: ayahosny/ayalab-backend:latest
+          image: PLACEHOLDER  # replaced by CI with the exact ECR digest
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
@@ -33,10 +42,42 @@ spec:
                   name: postgres-secret
                   key: POSTGRES_PASSWORD
             - name: FRONTEND_ORIGIN
-              value: http://localhost
+              valueFrom:
+                configMapKeyRef:
+                  name: ayalab-config
+                  key: FRONTEND_ORIGIN
+          resources:
+            requests:
+              cpu: "250m"     # guaranteed CPU
+              memory: "512Mi" # guaranteed memory
+            limits:
+              cpu: "500m"     # maximum CPU
+              memory: "1Gi"   # maximum memory — OOMKilled if exceeded
+
+          # startupProbe: gives the JVM time to boot before liveness kicks in
+          # Without this, livenessProbe would restart the container while it's still loading
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            failureThreshold: 30  # 30 * 10s = 5 minutes max startup time
+            periodSeconds: 10
+
+          # livenessProbe: restarts the container if the app is deadlocked or hung
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 0
+            periodSeconds: 15
+            failureThreshold: 3
+
+          # readinessProbe: removes pod from Service if it can't handle traffic
+          # (e.g. DB connection lost, cache warming, high load)
           readinessProbe:
             httpGet:
-              path: /api/problems
+              path: /actuator/health/readiness
               port: 8080
-            initialDelaySeconds: 15
+            initialDelaySeconds: 0
             periodSeconds: 10
+            failureThreshold: 3
