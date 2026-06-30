@@ -24,7 +24,7 @@ services:
       DB_URL: jdbc:postgresql://postgres:5432/ayalab
       DB_USERNAME: ayalab
       DB_PASSWORD: ${DB_PASSWORD:-ayalab}
-      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:4200}
+      FRONTEND_ORIGINS: ${FRONTEND_ORIGINS:-http://localhost:4200}
     depends_on:
       postgres:
         condition: service_healthy
