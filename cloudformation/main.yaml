@@ -248,7 +248,7 @@ Resources:
             DB_URL=jdbc:postgresql://${RDSInstance.Endpoint.Address}:5432/ayalab
             DB_USERNAME=ayalab
             DB_PASSWORD=${DBPassword}
-            FRONTEND_ORIGIN=${FrontendOrigin}
+            FRONTEND_ORIGINS=${FrontendOrigin}
             ENVEOF
             chmod 600 /etc/ayalab/env
 

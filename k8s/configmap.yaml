@@ -4,4 +4,4 @@ metadata:
   name: ayalab-config
   namespace: ayalab
 data:
-  FRONTEND_ORIGIN: "https://your-frontend-domain.com"
+  FRONTEND_ORIGINS: "http://ayalab.co"

@@ -41,11 +41,11 @@ spec:
                 secretKeyRef:
                   name: postgres-secret
                   key: POSTGRES_PASSWORD
-            - name: FRONTEND_ORIGIN
+            - name: FRONTEND_ORIGINS
               valueFrom:
                 configMapKeyRef:
                   name: ayalab-config
-                  key: FRONTEND_ORIGIN
+                  key: FRONTEND_ORIGINS
           resources:
             requests:
               cpu: "250m"     # guaranteed CPU

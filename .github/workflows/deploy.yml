@@ -16,6 +16,7 @@ jobs:
           username: ${{ secrets.HETZNER_USER }}
           key: ${{ secrets.HETZNER_SSH_KEY }}
           script: |
+            set -euo pipefail
             cd /var/www/aya-lab/ayalab-backend
 
             git pull origin main
