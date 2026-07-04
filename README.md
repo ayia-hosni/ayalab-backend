@@ -592,20 +592,31 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for step-by-step instructions for every optio
 
 ## CI/CD
 
-Two GitHub Actions workflows are included:
+Three GitHub Actions workflows are included:
 
 | Workflow | File | Trigger | What it does |
 |---|---|---|---|
-| Hetzner deploy | `.github/workflows/deploy.yml` | Push to `main` | SSH into Hetzner VPS → git pull → docker compose up |
+| Hetzner VPS deploy | `.github/workflows/deploy.yml` | Push to `main` | SSH into Hetzner VPS → git pull → docker compose up |
+| Hetzner k8s deploy | `.github/workflows/deploy-hetzner-k8s.yml` | Push to `main` | Build & push image to Docker Hub → apply `k8s/` manifests → rolling deploy to a Hetzner cluster |
 | AWS EKS deploy | `.github/workflows/deploy-aws-eks.yml` | Push to `main` | Build JAR → push to ECR → rolling deploy to EKS → auto-rollback on failure |
 
-**GitHub secrets required for Hetzner:**
+**GitHub secrets required for Hetzner VPS:**
 
 | Secret | Value |
 |---|---|
 | `HETZNER_HOST` | Server IP or domain |
 | `HETZNER_USER` | SSH user (e.g. `root`) |
 | `HETZNER_SSH_KEY` | Private key contents |
+
+**GitHub secrets required for Hetzner k8s:**
+
+| Secret | Value |
+|---|---|
+| `DOCKERHUB_USERNAME` | Docker Hub username |
+| `DOCKERHUB_TOKEN` | Docker Hub access token |
+| `KUBE_CONFIG_HETZNER` | Base64-encoded kubeconfig for the cluster — see [Provisioning a Hetzner k3s cluster for CI/CD](DEPLOYMENT.md#provisioning-a-hetzner-k3s-cluster-for-cicd-kube_config_hetzner) |
+| `DB_USERNAME` | Postgres username |
+| `DB_PASSWORD` | Postgres password |
 
 **GitHub secrets required for AWS EKS:**
 

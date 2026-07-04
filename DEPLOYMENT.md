@@ -170,6 +170,52 @@ kubectl delete namespace ayalab
 
 ---
 
+### Provisioning a Hetzner k3s cluster for CI/CD (`KUBE_CONFIG_HETZNER`)
+
+`.github/workflows/deploy-hetzner-k8s.yml` deploys to a real cluster on every push to `main`, authenticating with the `KUBE_CONFIG_HETZNER` secret. Unlike the local minikube/kind setup above, this cluster has to actually exist and be reachable from GitHub's runners. If you don't have one yet:
+
+**Step 1 — Provision a server.** Via the Hetzner Cloud Console or `hcloud` CLI. At least CX21 (2 vCPU/4GB) — `k8s/backend-deployment.yaml` requests 250m CPU / 512Mi memory per pod with 3 replicas, plus Postgres and HPA headroom up to 10 replicas.
+
+**Step 2 — Install k3s** (lightweight single-node Kubernetes, compatible with everything in `k8s/`):
+
+```bash
+ssh root@<new-server-ip>
+curl -sfL https://get.k3s.io | sh -
+```
+
+This starts a single-node cluster and writes a kubeconfig to `/etc/rancher/k3s/k3s.yaml`.
+
+**Step 3 — Fix the kubeconfig's server address.** It defaults to `127.0.0.1`, which only works from inside the node itself:
+
+```bash
+sudo cat /etc/rancher/k3s/k3s.yaml > k3s-fixed.yaml
+# edit k3s-fixed.yaml: replace https://127.0.0.1:6443 with https://<new-server-ip>:6443
+```
+
+**Step 4 — Open the API port.** GitHub's runners need to reach port `6443`:
+
+```bash
+# Hetzner Cloud Console → Firewalls → add rule: TCP 6443, source 0.0.0.0/0
+# (or restrict to GitHub Actions' published runner IP ranges)
+```
+
+**Step 5 — Set the GitHub secret:**
+
+```bash
+base64 -w0 k3s-fixed.yaml > k3s.b64
+gh secret set KUBE_CONFIG_HETZNER < k3s.b64
+```
+
+**Step 6 — Verify before trusting CI with it:**
+
+```bash
+KUBECONFIG=k3s-fixed.yaml kubectl get nodes
+```
+
+Before relying on this in production: the `postgres-pvc.yaml` PVC needs a `StorageClass` — k3s ships with `local-path` by default, which works for a single node but isn't resilient (the volume is tied to that one node's disk). This is a separate cluster from anything running on your Hetzner VPS via `deploy.yml` — moving Postgres here is a real migration, not just flipping CI on.
+
+---
+
 ## Option 4 — AWS + Terraform
 
 Provisions VPC, EC2 `t2.micro` (backend in Docker), and RDS `db.t3.micro` (PostgreSQL).

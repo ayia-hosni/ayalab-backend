@@ -67,21 +67,61 @@ ssh-copy-id -i ~/.ssh/ayalab_deploy.pub root@<server-ip>
 cat ~/.ssh/ayalab_deploy
 ```
 
-### 3. Clone the repository
+### 3. Give the VPS its own GitHub deploy key
+
+Step 2's key lets GitHub Actions SSH *into* the VPS. That's a different key from the one the VPS itself needs to `git pull` *from* GitHub — without this, `git pull origin main` fails with `Permission denied (publickey)` even though the Actions SSH step succeeded.
 
 ```bash
 ssh root@<server-ip>
+
+# Generate a dedicated, repo-scoped key (no passphrase — must run unattended)
+ssh-keygen -t ed25519 -f ~/.ssh/ayalab_deploy_key -N "" -C "ayalab-backend-deploy"
+cat ~/.ssh/ayalab_deploy_key.pub
+```
+
+Add the printed public key at **github.com → your repo → Settings → Deploy keys → Add deploy key**. Read-only access is enough since it only pulls.
+
+Pre-trust GitHub's host key so the non-interactive session never hits an "authenticity of host" prompt:
+
+```bash
+ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts
+```
+
+Lock down permissions or SSH will silently ignore the key:
+
+```bash
+chmod 700 ~/.ssh
+chmod 600 ~/.ssh/ayalab_deploy_key
+```
+
+### 4. Clone the repository
+
+```bash
 mkdir -p /var/www/aya-lab
 git clone <your-repo-url> /var/www/aya-lab/ayalab-backend
 cd /var/www/aya-lab/ayalab-backend
 ```
 
-### 4. Create the environment file
+Point this checkout at the deploy key from step 3 — this is per-repo config, so it works regardless of who's logged in or whether an `ssh-agent` is running:
+
+```bash
+git config core.sshCommand "ssh -i ~/.ssh/ayalab_deploy_key -o IdentitiesOnly=yes"
+```
+
+Verify it works the same way the automated deploy will invoke it — non-interactively, no agent:
+
+```bash
+env -i HOME="$HOME" bash -lc 'cd /var/www/aya-lab/ayalab-backend && git pull origin main'
+```
+
+This should fast-forward (or print `Already up to date.`) with no prompts.
+
+### 5. Create the environment file
 
 ```bash
 cat > /var/www/aya-lab/ayalab-backend/.env <<EOF
 DB_PASSWORD=a_strong_password_here
-FRONTEND_ORIGIN=https://your-frontend-domain.com
+FRONTEND_ORIGINS=https://your-frontend-domain.com
 PAYMOB_API_KEY=your_api_key
 PAYMOB_HMAC_SECRET=your_hmac_secret
 PAYMOB_BASE_URL=https://accept.paymob.com/api
@@ -92,9 +132,9 @@ PAYMOB_KIOSK_INTEGRATION_ID=0
 EOF
 ```
 
-The `.env` file is not committed to git — you manage it directly on the server.
+The `.env` file is not committed to git — you manage it directly on the server. Note the variable is `FRONTEND_ORIGINS` (plural, comma-separated for multiple origins) — the app ignores a singular `FRONTEND_ORIGIN` silently and falls back to its default.
 
-### 5. First manual deploy
+### 6. First manual deploy
 
 ```bash
 cd /var/www/aya-lab/ayalab-backend
@@ -198,6 +238,16 @@ ssh -i ~/.ssh/ayalab_deploy root@<server-ip> echo "ok"
 ```
 
 Make sure the private key in the `HETZNER_SSH_KEY` secret has no trailing newline issues — paste the raw output of `cat ~/.ssh/ayalab_deploy`.
+
+### `git pull` fails — `Permission denied (publickey)` for `git@github.com`
+
+This is **not** the same key as `HETZNER_SSH_KEY`. That secret only lets GitHub Actions SSH *into* the VPS — it says nothing about whether the VPS itself can authenticate *out* to GitHub to pull. If the "Deploy to VPS" SSH connection step succeeds but the `git pull` line inside the script fails with this error, the VPS is missing its own GitHub deploy key. Follow [step 3 of One-time VPS setup](#one-time-vps-setup) to fix it, then confirm with:
+
+```bash
+env -i HOME="$HOME" bash -lc 'cd /var/www/aya-lab/ayalab-backend && git pull origin main'
+```
+
+Running it via `env -i` matters — testing with a normal interactive `ssh` login can succeed (because your own `ssh-agent` is forwarded) while the automated, non-interactive session GitHub Actions opens still fails, since it has no agent and no access to your personal keys.
 
 ### `git pull` fails — merge conflict
 
