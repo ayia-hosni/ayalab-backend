@@ -17,6 +17,8 @@ jobs:
           key: ${{ secrets.HETZNER_SSH_KEY }}
           script: |
             set -euo pipefail
+            docker network inspect web >/dev/null 2>&1 || docker network create web
+
             cd /var/www/aya-lab/ayalab-backend
 
             git pull origin main
