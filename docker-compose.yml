@@ -18,16 +18,25 @@ services:
     image: ayahosny/ayalab-backend:latest
     build: .
     restart: unless-stopped
-    ports:
-      - "8080:8080"
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/ayalab
       DB_USERNAME: ayalab
       DB_PASSWORD: ${DB_PASSWORD:-ayalab}
-      FRONTEND_ORIGINS: ${FRONTEND_ORIGINS:-http://localhost:4200,http://ayalab.co}
+      FRONTEND_ORIGINS: ${FRONTEND_ORIGINS:-http://localhost:4200,https://ayalab.co}
+      VIRTUAL_HOST: api.ayalab.co
+      VIRTUAL_PORT: "8080"
+      LETSENCRYPT_HOST: api.ayalab.co
+      LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL:?set LETSENCRYPT_EMAIL in .env}
+    networks:
+      - default
+      - web
     depends_on:
       postgres:
         condition: service_healthy
+
+networks:
+  web:
+    external: true
 
 volumes:
   postgres_data:
