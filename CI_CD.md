@@ -27,11 +27,16 @@ GitHub Actions runner (ubuntu-latest)
      │
      ▼ SSH (appleboy/ssh-action)
 Hetzner VPS  /opt/ayalab
-  4. git pull origin main
-  5. docker compose down
-  6. docker compose up -d --build
-  7. docker image prune -f
+  4. docker network create web (skipped if it already exists)
+  5. git pull origin main
+  6. docker compose down
+  7. docker compose up -d --build
+  8. docker image prune -f
 ```
+
+Backend and frontend no longer publish ports directly — both join the external
+`web` network and are routed by the shared `nginx-proxy` + `acme-companion`
+stack (see `../reverse-proxy`), which must already be running on the VPS.
 
 The Postgres volume (`postgres_data`) is never touched during a deploy — data is preserved across every redeploy.
 
@@ -129,12 +134,24 @@ PAYMOB_CARD_INTEGRATION_ID=0
 PAYMOB_CARD_IFRAME_ID=0
 PAYMOB_WALLET_INTEGRATION_ID=0
 PAYMOB_KIOSK_INTEGRATION_ID=0
+LETSENCRYPT_EMAIL=you@realdomain.com
 EOF
 ```
 
-The `.env` file is not committed to git — you manage it directly on the server. Note the variable is `FRONTEND_ORIGINS` (plural, comma-separated for multiple origins) — the app ignores a singular `FRONTEND_ORIGIN` silently and falls back to its default.
+The `.env` file is not committed to git — you manage it directly on the server. Note the variable is `FRONTEND_ORIGINS` (plural, comma-separated for multiple origins) — the app ignores a singular `FRONTEND_ORIGIN` silently and falls back to its default. `LETSENCRYPT_EMAIL` is required by `docker-compose.yml` (compose fails fast if it's missing) — it's passed to `acme-companion` so api.ayalab.co gets a cert.
 
-### 6. First manual deploy
+### 6. Start the reverse-proxy stack
+
+The backend's compose file joins the external `web` network and won't start
+until it exists and `nginx-proxy`/`acme-companion` are routing for it:
+
+```bash
+docker network create web   # skip if it already exists
+cd /var/www/aya-lab/reverse-proxy
+LETSENCRYPT_EMAIL=you@realdomain.com docker compose up -d
+```
+
+### 7. First manual deploy
 
 ```bash
 cd /var/www/aya-lab/ayalab-backend
@@ -145,7 +162,7 @@ docker compose up -d --build
 Verify it's running:
 
 ```bash
-curl http://localhost:8080/api/problems | jq 'length'
+curl https://api.ayalab.co/api/problems | jq 'length'
 ```
 
 ---
