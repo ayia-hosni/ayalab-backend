@@ -30,9 +30,11 @@ public class JavaScriptJudge {
     /**
      * A small JS harness that defines a ListNode, converts arrays to/from linked
      * lists, invokes the user's reverseList, and returns the resulting array.
-     * The user code is injected where indicated.
+     * The user code is injected where indicated, via plain concatenation (never
+     * String.format/.formatted) so a stray '%' in the user's own code or
+     * comments can never be misread as a format specifier.
      */
-    private static final String HARNESS = """
+    private static final String HARNESS_PREFIX = """
             function ListNode(val, next) {
               this.val = (val === undefined ? 0 : val);
               this.next = (next === undefined ? null : next);
@@ -49,7 +51,10 @@ public class JavaScriptJudge {
             }
 
             // ===== user code begins =====
-            %s
+            """;
+
+    private static final String HARNESS_SUFFIX = """
+
             // ===== user code ends =====
 
             // Bridge invoked from Java with a plain JS array of ints.
@@ -61,7 +66,7 @@ public class JavaScriptJudge {
             """;
 
     public SubmitResult run(String userCode, List<TestCase> cases) {
-        String source = String.format(HARNESS, userCode);
+        String source = HARNESS_PREFIX + userCode + HARNESS_SUFFIX;
         long start = System.nanoTime();
 
         ExecutorService executor = Executors.newSingleThreadExecutor();

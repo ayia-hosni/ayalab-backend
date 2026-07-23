@@ -5,6 +5,7 @@ import com.ayalab.dto.SubmitResult;
 import com.ayalab.entity.Problem;
 import com.ayalab.entity.ProblemStatus;
 import com.ayalab.entity.ProblemTestCase;
+import com.ayalab.judge.JavaJudge;
 import com.ayalab.judge.JavaScriptJudge;
 import com.ayalab.judge.TestCase;
 import com.ayalab.repository.ProblemRepository;
@@ -18,18 +19,21 @@ import java.util.List;
 @Service
 public class SubmissionService {
 
-    private final JavaScriptJudge judge;
+    private final JavaScriptJudge jsJudge;
+    private final JavaJudge javaJudge;
     private final ProblemRepository problemRepository;
     private final ProblemTestCaseRepository testCaseRepository;
     private final ProblemService problemService;
     private final ObjectMapper objectMapper;
 
-    public SubmissionService(JavaScriptJudge judge,
+    public SubmissionService(JavaScriptJudge jsJudge,
+                             JavaJudge javaJudge,
                              ProblemRepository problemRepository,
                              ProblemTestCaseRepository testCaseRepository,
                              ProblemService problemService,
                              ObjectMapper objectMapper) {
-        this.judge = judge;
+        this.jsJudge = jsJudge;
+        this.javaJudge = javaJudge;
         this.problemRepository = problemRepository;
         this.testCaseRepository = testCaseRepository;
         this.problemService = problemService;
@@ -40,10 +44,12 @@ public class SubmissionService {
         Problem problem = problemRepository.findBySlug(slug)
                 .orElseThrow(() -> new IllegalArgumentException("Unknown problem: " + slug));
 
-        if (!"javascript".equalsIgnoreCase(request.language())) {
+        boolean isJs = "javascript".equalsIgnoreCase(request.language());
+        boolean isJava = "java".equalsIgnoreCase(request.language());
+        if (!isJs && !isJava) {
             return new SubmitResult(false, "Unsupported Language",
-                    "Server-side execution currently supports JavaScript only. "
-                            + "Python and Java solutions are provided as reference.",
+                    "Server-side execution currently supports JavaScript and Java. "
+                            + "Python solutions are provided as reference.",
                     0, List.of());
         }
 
@@ -56,7 +62,7 @@ public class SubmissionService {
                 .map(this::toTestCase)
                 .toList();
 
-        SubmitResult result = judge.run(request.code(), cases);
+        SubmitResult result = isJava ? javaJudge.run(request.code(), cases) : jsJudge.run(request.code(), cases);
 
         if (result.accepted() && request.submit()) {
             problemService.updateStatus(problem.getId(), ProblemStatus.SOLVED);
