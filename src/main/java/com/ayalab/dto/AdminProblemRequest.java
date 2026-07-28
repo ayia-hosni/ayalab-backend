@@ -15,5 +15,6 @@ public record AdminProblemRequest(
         String             visualizerType,
         Map<String, String> starterCode,
         boolean            available,
-        List<AdminTestCaseRequest> testCases
+        List<AdminTestCaseRequest> testCases,
+        Map<String, String> gameConfigs
 ) {}

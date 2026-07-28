@@ -4,21 +4,27 @@ import com.ayalab.dto.ProblemDetail;
 import com.ayalab.dto.ProblemSummary;
 import com.ayalab.entity.Difficulty;
 import com.ayalab.entity.Problem;
+import com.ayalab.entity.ProblemGameConfig;
 import com.ayalab.entity.ProblemStatus;
+import com.ayalab.repository.ProblemGameConfigRepository;
 import com.ayalab.repository.ProblemRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Service
 public class ProblemService {
 
     private final ProblemRepository repository;
+    private final ProblemGameConfigRepository gameConfigs;
 
-    public ProblemService(ProblemRepository repository) {
+    public ProblemService(ProblemRepository repository, ProblemGameConfigRepository gameConfigs) {
         this.repository = repository;
+        this.gameConfigs = gameConfigs;
     }
 
     public List<ProblemSummary> list(String difficulty, String status, String search, String tag) {
@@ -33,7 +39,15 @@ public class ProblemService {
 
     @Transactional(readOnly = true)
     public Optional<ProblemDetail> getBySlug(String slug) {
-        return repository.findBySlug(slug).map(ProblemDetail::from);
+        return repository.findBySlug(slug).map(p -> ProblemDetail.from(p, gameConfigsFor(p.getId())));
+    }
+
+    private Map<String, String> gameConfigsFor(Long problemId) {
+        Map<String, String> byKey = new LinkedHashMap<>();
+        for (ProblemGameConfig cfg : gameConfigs.findByProblemId(problemId)) {
+            byKey.put(cfg.getVisualizerKind().jsonKey(), cfg.getConfig());
+        }
+        return byKey;
     }
 
     public List<String> allTags() {

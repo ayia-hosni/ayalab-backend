@@ -13,6 +13,7 @@ For local development, see [DEVELOPMENT.md](DEVELOPMENT.md).
 - [Option 5 — AWS + CloudFormation](#option-5--aws--cloudformation)
 - [Option 6 — AWS + CDK](#option-6--aws--cdk-java)
 - [Option 7 — Hetzner VPS](#option-7--hetzner-vps)
+- [Option 8 — Azure + Terraform](#option-8--azure--terraform)
 
 ---
 
@@ -27,6 +28,7 @@ For local development, see [DEVELOPMENT.md](DEVELOPMENT.md).
 | [CloudFormation](#option-5--aws--cloudformation) | AWS | Free 12 mo → ~$15/mo | Medium |
 | [CDK](#option-6--aws--cdk-java) | AWS | Free 12 mo → ~$15/mo | Medium |
 | [Hetzner VPS](#option-7--hetzner-vps) | Hetzner | €3.29/mo forever | Low |
+| [Azure + Terraform](#option-8--azure--terraform) | Azure | ~$15-20/mo | Medium |
 
 ---
 
@@ -476,6 +478,64 @@ api.yourdomain.com {
 
 ```bash
 systemctl reload caddy
+```
+
+---
+
+## Option 8 — Azure + Terraform
+
+Provisions a VNet, a `Standard_B1s` Linux VM (backend in Docker), and an Azure Database
+for PostgreSQL Flexible Server `B_Standard_B1ms`, connected over a private VNet-integrated
+subnet. Mirrors the [AWS + Terraform](#option-4--aws--terraform) setup resource-for-resource.
+
+**Prerequisites:**
+
+```bash
+brew install terraform azure-cli
+az login
+```
+
+**Step 1 — Build the JAR:**
+
+```bash
+mvn package -DskipTests
+```
+
+**Step 2 — Create your tfvars:**
+
+```bash
+cp terraform-azure/terraform.tfvars.example terraform-azure/terraform.tfvars
+# edit: set db_password, ssh_public_key, frontend_origin
+```
+
+**Step 3 — Deploy:**
+
+```bash
+cd terraform-azure
+terraform init
+terraform plan
+terraform apply   # ~10 min — PostgreSQL Flexible Server is the slow part
+```
+
+Terraform prints `backend_url`, `ssh_command`, and `postgres_fqdn` when done.
+
+**Step 4 — Verify:**
+
+```bash
+curl http://<public-ip>:8080/api/problems | jq '.[0]'
+```
+
+**Redeploy after code changes:**
+
+```bash
+mvn package -DskipTests
+cd terraform-azure && terraform apply   # detects JAR change via MD5 hash
+```
+
+**Teardown:**
+
+```bash
+terraform destroy
 ```
 
 Caddy auto-provisions a Let's Encrypt certificate. Update `FRONTEND_ORIGIN` in `.env` to your domain, then `docker compose up -d`.

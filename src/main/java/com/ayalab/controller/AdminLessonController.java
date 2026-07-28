@@ -82,6 +82,10 @@ public class AdminLessonController {
         l.setTitleAr(req.titleAr());
         l.setDescriptionEn(req.descriptionEn());
         l.setDescriptionAr(req.descriptionAr());
+        l.setSectionEn(req.sectionEn());
+        l.setSectionAr(req.sectionAr());
+        l.setCategoryEn(req.categoryEn());
+        l.setCategoryAr(req.categoryAr());
         return l;
     }
 

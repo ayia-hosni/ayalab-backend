@@ -19,6 +19,11 @@ terraform/.terraform.lock.hcl
 terraform/terraform.tfstate
 terraform/terraform.tfstate.backup
 terraform/terraform.tfvars
+terraform-azure/.terraform/
+terraform-azure/.terraform.lock.hcl
+terraform-azure/terraform.tfstate
+terraform-azure/terraform.tfstate.backup
+terraform-azure/terraform.tfvars
 .env
 
 # CDK

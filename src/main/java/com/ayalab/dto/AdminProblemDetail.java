@@ -1,10 +1,13 @@
 package com.ayalab.dto;
 
 import com.ayalab.entity.Problem;
+
+[[import com.ayalab.entity.ProblemGameConfig;
 import com.ayalab.entity.ProblemTestCase;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public record AdminProblemDetail(
         Long                       id,
@@ -18,9 +21,10 @@ public record AdminProblemDetail(
         String                     visualizerType,
         String                     description,
         Map<String, String>        starterCode,
-        List<AdminTestCaseRequest> testCases
+        List<AdminTestCaseRequest> testCases,
+        Map<String, String>        gameConfigs
 ) {
-    public static AdminProblemDetail from(Problem p, List<ProblemTestCase> cases) {
+    public static AdminProblemDetail from(Problem p, List<ProblemTestCase> cases, List<ProblemGameConfig> configs) {
         return new AdminProblemDetail(
                 p.getId(),
                 p.getTitle(),
@@ -35,7 +39,9 @@ public record AdminProblemDetail(
                 Map.copyOf(p.getStarterCode()),
                 cases.stream()
                      .map(c -> new AdminTestCaseRequest(c.getId(), c.getOrdinal(), c.isSample(), c.getInputJson(), c.getOutputJson()))
-                     .toList()
+                     .toList(),
+                configs.stream()
+                       .collect(Collectors.toMap(c -> c.getVisualizerKind().jsonKey(), ProblemGameConfig::getConfig))
         );
     }
 }

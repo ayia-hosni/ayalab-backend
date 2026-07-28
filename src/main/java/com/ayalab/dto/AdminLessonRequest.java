@@ -9,5 +9,9 @@ public record AdminLessonRequest(
         String titleAr,
         String descriptionEn,
         String descriptionAr,
+        String sectionEn,
+        String sectionAr,
+        String categoryEn,
+        String categoryAr,
         List<AdminSlideRequest> slides
 ) {}

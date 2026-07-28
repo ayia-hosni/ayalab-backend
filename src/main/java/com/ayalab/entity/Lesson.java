@@ -35,6 +35,20 @@ public class Lesson {
     @Column(name = "description_ar", nullable = false, columnDefinition = "text")
     private String descriptionAr;
 
+    /** Topic group, e.g. "Linked Lists" — every lesson belongs to one. */
+    @Column(name = "section_en", nullable = false, columnDefinition = "text")
+    private String sectionEn;
+
+    @Column(name = "section_ar", nullable = false, columnDefinition = "text")
+    private String sectionAr;
+
+    /** Optional sub-tag within the section, e.g. "Insertion"; null means uncategorized. */
+    @Column(name = "category_en", columnDefinition = "text")
+    private String categoryEn;
+
+    @Column(name = "category_ar", columnDefinition = "text")
+    private String categoryAr;
+
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
@@ -55,4 +69,16 @@ public class Lesson {
 
     public String getDescriptionAr() { return descriptionAr; }
     public void setDescriptionAr(String descriptionAr) { this.descriptionAr = descriptionAr; }
+
+    public String getSectionEn() { return sectionEn; }
+    public void setSectionEn(String sectionEn) { this.sectionEn = sectionEn; }
+
+    public String getSectionAr() { return sectionAr; }
+    public void setSectionAr(String sectionAr) { this.sectionAr = sectionAr; }
+
+    public String getCategoryEn() { return categoryEn; }
+    public void setCategoryEn(String categoryEn) { this.categoryEn = categoryEn; }
+
+    public String getCategoryAr() { return categoryAr; }
+    public void setCategoryAr(String categoryAr) { this.categoryAr = categoryAr; }
 }

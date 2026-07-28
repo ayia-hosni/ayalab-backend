@@ -17,9 +17,13 @@ public record ProblemDetail(
         @Schema(description = "Topic tags", example = "[\"Array\", \"Hash Table\"]") List<String> tags,
         @Schema(description = "Whether a step-by-step visualizer is available") boolean hasVisualizer,
         @Schema(description = "Full problem description in Markdown") String description,
-        @Schema(description = "Starter code per language, e.g. {\"javascript\":\"…\"}") Map<String, String> starterCode
+        @Schema(description = "Arabic translation of the description; null when not yet translated") String descriptionAr,
+        @Schema(description = "Starter code per language, e.g. {\"javascript\":\"…\"}") Map<String, String> starterCode,
+        @Schema(description = "Interactive game content per visualizer tab, e.g. {\"traceGame\":\"{...}\"}. " +
+                "Values are raw JSON strings owned by the frontend engines; empty when the problem has no games.")
+        Map<String, String> gameConfigs
 ) {
-    public static ProblemDetail from(Problem p) {
+    public static ProblemDetail from(Problem p, Map<String, String> gameConfigs) {
         return new ProblemDetail(
                 p.getId(),
                 p.getTitle(),
@@ -30,7 +34,9 @@ public record ProblemDetail(
                 List.copyOf(p.getTags()),
                 p.getVisualizerType() != null,
                 p.getDescription(),
-                Map.copyOf(p.getStarterCode())
+                p.getDescriptionAr(),
+                Map.copyOf(p.getStarterCode()),
+                gameConfigs
         );
     }
 }

@@ -4,7 +4,10 @@ import com.ayalab.dto.AdminProblemDetail;
 import com.ayalab.dto.AdminProblemRequest;
 import com.ayalab.entity.Difficulty;
 import com.ayalab.entity.Problem;
+import com.ayalab.entity.ProblemGameConfig;
 import com.ayalab.entity.ProblemTestCase;
+import com.ayalab.entity.VisualizerKind;
+import com.ayalab.repository.ProblemGameConfigRepository;
 import com.ayalab.repository.ProblemRepository;
 import com.ayalab.repository.ProblemTestCaseRepository;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -23,10 +26,13 @@ public class AdminController {
 
     private final ProblemRepository problems;
     private final ProblemTestCaseRepository testCases;
+    private final ProblemGameConfigRepository gameConfigs;
 
-    public AdminController(ProblemRepository problems, ProblemTestCaseRepository testCases) {
-        this.problems  = problems;
-        this.testCases = testCases;
+    public AdminController(ProblemRepository problems, ProblemTestCaseRepository testCases,
+                            ProblemGameConfigRepository gameConfigs) {
+        this.problems    = problems;
+        this.testCases   = testCases;
+        this.gameConfigs = gameConfigs;
     }
 
     @GetMapping
@@ -34,7 +40,8 @@ public class AdminController {
     public List<AdminProblemDetail> list() {
         return problems.findAll().stream()
                 .sorted((a, b) -> Long.compare(a.getId(), b.getId()))
-                .map(p -> AdminProblemDetail.from(p, testCases.findByProblemIdOrderByOrdinal(p.getId())))
+                .map(p -> AdminProblemDetail.from(p, testCases.findByProblemIdOrderByOrdinal(p.getId()),
+                        gameConfigs.findByProblemId(p.getId())))
                 .toList();
     }
 
@@ -42,7 +49,8 @@ public class AdminController {
     @Transactional(readOnly = true)
     public ResponseEntity<AdminProblemDetail> get(@PathVariable Long id) {
         return problems.findById(id)
-                .map(p -> ResponseEntity.ok(AdminProblemDetail.from(p, testCases.findByProblemIdOrderByOrdinal(id))))
+                .map(p -> ResponseEntity.ok(AdminProblemDetail.from(p, testCases.findByProblemIdOrderByOrdinal(id),
+                        gameConfigs.findByProblemId(id))))
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
@@ -54,7 +62,9 @@ public class AdminController {
         Problem p = applyRequest(new Problem(), req);
         problems.save(p);
         saveTestCases(p.getId(), req);
-        return ResponseEntity.ok(AdminProblemDetail.from(p, testCases.findByProblemIdOrderByOrdinal(p.getId())));
+        saveGameConfigs(p.getId(), req);
+        return ResponseEntity.ok(AdminProblemDetail.from(p, testCases.findByProblemIdOrderByOrdinal(p.getId()),
+                gameConfigs.findByProblemId(p.getId())));
     }
 
     @PutMapping("/{id}")
@@ -66,7 +76,11 @@ public class AdminController {
             // Replace test cases: delete existing, insert new.
             testCases.deleteAll(testCases.findByProblemIdOrderByOrdinal(id));
             saveTestCases(id, req);
-            return ResponseEntity.ok(AdminProblemDetail.from(p, testCases.findByProblemIdOrderByOrdinal(id)));
+            // Same replace-wholesale approach for game configs.
+            gameConfigs.deleteAll(gameConfigs.findByProblemId(id));
+            saveGameConfigs(id, req);
+            return ResponseEntity.ok(AdminProblemDetail.from(p, testCases.findByProblemIdOrderByOrdinal(id),
+                    gameConfigs.findByProblemId(id)));
         }).orElseGet(() -> ResponseEntity.notFound().build());
     }
 
@@ -75,6 +89,7 @@ public class AdminController {
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         if (!problems.existsById(id)) return ResponseEntity.notFound().build();
         testCases.deleteAll(testCases.findByProblemIdOrderByOrdinal(id));
+        gameConfigs.deleteAll(gameConfigs.findByProblemId(id));
         problems.deleteById(id);
         return ResponseEntity.noContent().build();
     }
@@ -101,5 +116,14 @@ public class AdminController {
                 .map(tc -> new ProblemTestCase(problemId, tc.ordinal(), tc.sample(), tc.inputJson(), tc.outputJson()))
                 .toList();
         testCases.saveAll(toSave);
+    }
+
+    private void saveGameConfigs(Long problemId, AdminProblemRequest req) {
+        if (req.gameConfigs() == null) return;
+        List<ProblemGameConfig> toSave = req.gameConfigs().entrySet().stream()
+                .filter(e -> e.getValue() != null && !e.getValue().isBlank())
+                .map(e -> new ProblemGameConfig(problemId, VisualizerKind.fromJsonKey(e.getKey()), e.getValue()))
+                .toList();
+        gameConfigs.saveAll(toSave);
     }
 }

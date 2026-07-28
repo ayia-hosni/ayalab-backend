@@ -13,6 +13,10 @@ public record LessonDetail(
         String titleAr,
         String descriptionEn,
         String descriptionAr,
+        String sectionEn,
+        String sectionAr,
+        String categoryEn,
+        String categoryAr,
         List<SlideDto> slides
 ) {
     public static LessonDetail from(Lesson l, List<LessonSlide> slides) {
@@ -20,6 +24,8 @@ public record LessonDetail(
                 l.getId(), l.getOrdinal(), l.getIcon(),
                 l.getTitleEn(), l.getTitleAr(),
                 l.getDescriptionEn(), l.getDescriptionAr(),
+                l.getSectionEn(), l.getSectionAr(),
+                l.getCategoryEn(), l.getCategoryAr(),
                 slides.stream().map(SlideDto::from).toList()
         );
     }

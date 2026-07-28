@@ -52,6 +52,10 @@ public class Problem {
     @Column(columnDefinition = "text")
     private String description;
 
+    /** Arabic translation of {@link #description}; null when not yet translated. */
+    @Column(name = "description_ar", columnDefinition = "text")
+    private String descriptionAr;
+
     /** Identifies which interactive visualizer to show; null means none.
      *  Known values: 'POINTER_TRACE'. Extensible without a schema change. */
     @Column(name = "visualizer_type")
@@ -91,6 +95,9 @@ public class Problem {
 
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
+
+    public String getDescriptionAr() { return descriptionAr; }
+    public void setDescriptionAr(String descriptionAr) { this.descriptionAr = descriptionAr; }
 
     public String getVisualizerType() { return visualizerType; }
     public void setVisualizerType(String visualizerType) { this.visualizerType = visualizerType; }

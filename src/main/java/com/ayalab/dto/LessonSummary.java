@@ -10,6 +10,10 @@ public record LessonSummary(
         String titleAr,
         String descriptionEn,
         String descriptionAr,
+        String sectionEn,
+        String sectionAr,
+        String categoryEn,
+        String categoryAr,
         int    slideCount
 ) {
     public static LessonSummary from(Lesson l, long slideCount) {
@@ -17,6 +21,8 @@ public record LessonSummary(
                 l.getId(), l.getOrdinal(), l.getIcon(),
                 l.getTitleEn(), l.getTitleAr(),
                 l.getDescriptionEn(), l.getDescriptionAr(),
+                l.getSectionEn(), l.getSectionAr(),
+                l.getCategoryEn(), l.getCategoryAr(),
                 (int) slideCount
         );
     }
