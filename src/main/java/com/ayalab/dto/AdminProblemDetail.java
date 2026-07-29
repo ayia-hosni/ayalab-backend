@@ -2,7 +2,7 @@ package com.ayalab.dto;
 
 import com.ayalab.entity.Problem;
 
-[[import com.ayalab.entity.ProblemGameConfig;
+import com.ayalab.entity.ProblemGameConfig;
 import com.ayalab.entity.ProblemTestCase;
 
 import java.util.List;
