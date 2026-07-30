@@ -1,0 +1,66 @@
+name: Deploy Backend to Azure (Terraform)
+
+# Manual trigger on purpose: this provisions/mutates real billable Azure
+# infrastructure (VM + Postgres Flexible Server) via `terraform apply`,
+# unlike the Hetzner deploy which just restarts a docker-compose stack.
+# Run it from the Actions tab when you actually want to (re)deploy.
+on:
+  workflow_dispatch:
+
+env:
+  ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  TF_VAR_db_password: ${{ secrets.TF_DB_PASSWORD }}
+  TF_VAR_ssh_public_key: ${{ secrets.TF_SSH_PUBLIC_KEY }}
+  TF_VAR_frontend_origin: ${{ secrets.TF_FRONTEND_ORIGIN }}
+  TF_VAR_ssh_private_key_path: /tmp/tf_deploy_key
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform-azure
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+
+      - name: Build JAR
+        working-directory: .
+        run: mvn clean package -DskipTests
+
+      - name: Write SSH deploy key
+        run: |
+          umask 077
+          printf '%s\n' "${{ secrets.TF_SSH_PRIVATE_KEY }}" > /tmp/tf_deploy_key
+          chmod 600 /tmp/tf_deploy_key
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.8.5'
+
+      - name: Terraform init
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=${{ secrets.TF_STATE_RESOURCE_GROUP }}" \
+            -backend-config="storage_account_name=${{ secrets.TF_STATE_STORAGE_ACCOUNT }}" \
+            -backend-config="container_name=${{ secrets.TF_STATE_CONTAINER }}" \
+            -backend-config="key=ayalab-backend.tfstate"
+
+      - name: Terraform plan
+        run: terraform plan -out=tfplan
+
+      - name: Terraform apply
+        run: terraform apply -auto-approve tfplan
+
+      - name: Show outputs
+        run: terraform output
