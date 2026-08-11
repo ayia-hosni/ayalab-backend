@@ -1,0 +1,6 @@
+aws_region           = "us-east-1"
+db_password          = "change_me_strong_password"
+ssh_public_key       = "ssh-rsa AAAA... your public key here"
+ssh_private_key_path = "~/.ssh/id_rsa"
+frontend_origin      = "http://localhost:4200"
+app_version          = "1.0.0"

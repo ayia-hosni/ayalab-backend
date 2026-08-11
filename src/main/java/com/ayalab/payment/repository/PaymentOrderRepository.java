@@ -1,0 +1,12 @@
+package com.ayalab.payment.repository;
+
+import com.ayalab.payment.entity.PaymentOrder;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.Optional;
+import java.util.UUID;
+
+public interface PaymentOrderRepository extends JpaRepository<PaymentOrder, UUID> {
+    Optional<PaymentOrder> findByInternalRef(String internalRef);
+    Optional<PaymentOrder> findByPaymobOrderId(String paymobOrderId);
+}

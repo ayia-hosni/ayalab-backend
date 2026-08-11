@@ -1,0 +1,10 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ayalab-backend-pdb
+  namespace: ayalab
+spec:
+  minAvailable: 2          # always keep at least 2 pods running during node maintenance
+  selector:
+    matchLabels:
+      app: ayalab-backend
