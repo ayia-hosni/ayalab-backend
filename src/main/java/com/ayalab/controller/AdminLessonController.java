@@ -1,16 +1,21 @@
 package com.ayalab.controller;
 
+import com.ayalab.dto.AdminLessonDto;
 import com.ayalab.dto.AdminLessonRequest;
-import com.ayalab.dto.AdminSlideRequest;
-import com.ayalab.dto.LessonDetail;
-import com.ayalab.entity.Lesson;
-import com.ayalab.entity.LessonSlide;
-import com.ayalab.repository.LessonRepository;
-import com.ayalab.repository.LessonSlideRepository;
+import com.ayalab.dto.AdminTaxonomyDto;
+import com.ayalab.dto.TaxonomyRequest;
+import com.ayalab.service.AdminLessonService;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
@@ -19,86 +24,52 @@ import java.util.List;
 @RequestMapping("/api/admin/lessons")
 public class AdminLessonController {
 
-    private final LessonRepository lessons;
-    private final LessonSlideRepository slides;
+    private final AdminLessonService service;
 
-    public AdminLessonController(LessonRepository lessons, LessonSlideRepository slides) {
-        this.lessons = lessons;
-        this.slides  = slides;
+    public AdminLessonController(AdminLessonService service) {
+        this.service = service;
     }
 
     @GetMapping
-    @Transactional(readOnly = true)
-    public List<LessonDetail> list() {
-        return lessons.findAllByOrderByOrdinal().stream()
-                .map(l -> LessonDetail.from(l, slides.findByLessonIdOrderByOrdinal(l.getId())))
-                .toList();
+    public List<AdminLessonDto> list() {
+        return service.list();
     }
 
     @GetMapping("/{id}")
-    @Transactional(readOnly = true)
-    public ResponseEntity<LessonDetail> get(@PathVariable Long id) {
-        return lessons.findById(id)
-                .map(l -> ResponseEntity.ok(LessonDetail.from(l, slides.findByLessonIdOrderByOrdinal(id))))
-                .orElseGet(() -> ResponseEntity.notFound().build());
+    public AdminLessonDto get(@PathVariable Long id) {
+        return service.get(id);
     }
 
     @PostMapping
-    @Transactional
-    public ResponseEntity<LessonDetail> create(@RequestBody AdminLessonRequest req) {
-        Lesson l = applyRequest(new Lesson(), req);
-        lessons.save(l);
-        saveSlides(l.getId(), req);
-        return ResponseEntity.ok(LessonDetail.from(l, slides.findByLessonIdOrderByOrdinal(l.getId())));
+    public AdminLessonDto create(@Valid @RequestBody AdminLessonRequest req) {
+        return service.create(req);
     }
 
     @PutMapping("/{id}")
-    @Transactional
-    public ResponseEntity<LessonDetail> update(@PathVariable Long id, @RequestBody AdminLessonRequest req) {
-        return lessons.findById(id).map(l -> {
-            applyRequest(l, req);
-            lessons.save(l);
-            slides.deleteAll(slides.findByLessonIdOrderByOrdinal(id));
-            saveSlides(id, req);
-            return ResponseEntity.ok(LessonDetail.from(l, slides.findByLessonIdOrderByOrdinal(id)));
-        }).orElseGet(() -> ResponseEntity.notFound().build());
+    public AdminLessonDto update(@PathVariable Long id, @Valid @RequestBody AdminLessonRequest req) {
+        return service.update(id, req);
     }
 
     @DeleteMapping("/{id}")
-    @Transactional
     public ResponseEntity<Void> delete(@PathVariable Long id) {
-        if (!lessons.existsById(id)) return ResponseEntity.notFound().build();
-        slides.deleteAll(slides.findByLessonIdOrderByOrdinal(id));
-        lessons.deleteById(id);
+        service.delete(id);
         return ResponseEntity.noContent().build();
     }
 
-    // ── helpers ───────────────────────────────────────────────────────────────
+    // ── taxonomy (sections / categories) ──────────────────────────────────────
 
-    private Lesson applyRequest(Lesson l, AdminLessonRequest req) {
-        l.setOrdinal(req.ordinal());
-        l.setIcon(req.icon());
-        l.setTitleEn(req.titleEn());
-        l.setTitleAr(req.titleAr());
-        l.setDescriptionEn(req.descriptionEn());
-        l.setDescriptionAr(req.descriptionAr());
-        l.setSectionEn(req.sectionEn());
-        l.setSectionAr(req.sectionAr());
-        l.setCategoryEn(req.categoryEn());
-        l.setCategoryAr(req.categoryAr());
-        return l;
+    @GetMapping("/taxonomy")
+    public AdminTaxonomyDto taxonomy() {
+        return service.taxonomy();
     }
 
-    private void saveSlides(Long lessonId, AdminLessonRequest req) {
-        if (req.slides() == null) return;
-        List<LessonSlide> toSave = req.slides().stream()
-                .map(s -> toEntity(lessonId, s))
-                .toList();
-        slides.saveAll(toSave);
+    @PostMapping("/taxonomy/sections")
+    public AdminTaxonomyDto createSection(@Valid @RequestBody TaxonomyRequest req) {
+        return service.createSection(req);
     }
 
-    private LessonSlide toEntity(Long lessonId, AdminSlideRequest s) {
-        return new LessonSlide(lessonId, s.ordinal(), s.kickerEn(), s.kickerAr(),
-                s.titleEn(), s.titleAr(), s.visual(), s.visualSpec(), s.bodyEn(), s.bodyAr());
+    @PostMapping("/taxonomy/categories")
+    public AdminTaxonomyDto createCategory(@Valid @RequestBody TaxonomyRequest req) {
+        return service.createCategory(req);
     }
 }

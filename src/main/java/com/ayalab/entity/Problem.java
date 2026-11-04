@@ -72,6 +72,18 @@ public class Problem {
     @Column(nullable = false)
     private boolean available = false;
 
+    /** Name of the solution method the judge calls; null when the problem has no judge yet. */
+    @Column(name = "judge_method")
+    private String judgeMethod;
+
+    /** LIST, LIST_AND_INT or INT: what the method receives; set together with {@link #judgeMethod}. */
+    @Column(name = "judge_args_kind")
+    private String judgeArgsKind;
+
+    /** LIST, BOOLEAN or INT: what the method returns; set together with {@link #judgeMethod}. */
+    @Column(name = "judge_result_kind")
+    private String judgeResultKind;
+
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
@@ -106,5 +118,8 @@ public class Problem {
     public void setStarterCode(Map<String, String> starterCode) { this.starterCode = starterCode; }
 
     public boolean isAvailable() { return available; }
+    public String getJudgeMethod() { return judgeMethod; }
+    public String getJudgeArgsKind() { return judgeArgsKind; }
+    public String getJudgeResultKind() { return judgeResultKind; }
     public void setAvailable(boolean available) { this.available = available; }
 }

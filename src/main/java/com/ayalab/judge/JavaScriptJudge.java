@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -15,8 +16,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 /**
- * Executes a user-supplied JavaScript {@code reverseList(head)} implementation
- * against a list of test cases.
+ * Executes a user-supplied JavaScript function (named by the {@link JudgeSpec}) that
+ * takes a linked-list head, against a list of test cases.
  *
  * <p>The user code runs inside a locked-down GraalVM polyglot context: no host
  * access, no IO, no threads. Each run is additionally guarded by a wall-clock
@@ -29,7 +30,7 @@ public class JavaScriptJudge {
 
     /**
      * A small JS harness that defines a ListNode, converts arrays to/from linked
-     * lists, invokes the user's reverseList, and returns the resulting array.
+     * lists, invokes the user's function, and returns its result (an array or a boolean).
      * The user code is injected where indicated, via plain concatenation (never
      * String.format/.formatted) so a stray '%' in the user's own code or
      * comments can never be misread as a format specifier.
@@ -57,16 +58,24 @@ public class JavaScriptJudge {
 
             // ===== user code ends =====
 
-            // Bridge invoked from Java with a plain JS array of ints.
-            function __run(arr) {
-              const head = __fromArray(arr);
-              const res = reverseList(head);
-              return __toArray(res);
+            // Bridge invoked from Java with the input as a JSON array string. Passing a string (rather than
+            // a Java array) keeps the sandbox free of host-object interop, which isn't iterable here.
+            function __run(json) {
+              const input = JSON.parse(json);
+              const res = __METHOD__(__ARGS__);
+              return __RESULT__;
             }
             """;
 
-    public SubmitResult run(String userCode, List<TestCase> cases) {
-        String source = HARNESS_PREFIX + userCode + HARNESS_SUFFIX;
+    public SubmitResult run(String userCode, JudgeSpec spec, List<TestCase> cases) {
+        String args = switch (spec.args()) {
+            case LIST -> "__fromArray(input)";
+            case LIST_AND_INT -> "__fromArray(input[0]), input[1]";
+            case INT -> "input";
+        };
+        String result = spec.result() == JudgeSpec.ResultKind.LIST ? "__toArray(res)" : "res";
+        String source = HARNESS_PREFIX + userCode
+                + HARNESS_SUFFIX.replace("__METHOD__", spec.method()).replace("__ARGS__", args).replace("__RESULT__", result);
         long start = System.nanoTime();
 
         ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -90,13 +99,13 @@ public class JavaScriptJudge {
             if (run == null || !run.canExecute()) {
                 context.close(true);
                 return new SubmitResult(false, "Compile Error",
-                        "reverseList is not defined as a function", 0, List.of());
+                        spec.method() + " is not defined as a function", 0, List.of());
             }
 
             List<SubmitResult.CaseResult> results = new ArrayList<>();
             boolean allPassed = true;
             for (TestCase tc : cases) {
-                CaseOutcome outcome = runCase(executor, run, tc);
+                CaseOutcome outcome = runCase(executor, run, spec, tc);
                 results.add(outcome.result());
                 if (!outcome.result().passed()) {
                     allPassed = false;
@@ -119,9 +128,17 @@ public class JavaScriptJudge {
         }
     }
 
-    private CaseOutcome runCase(ExecutorService executor, Value run, TestCase tc) {
-        Callable<List<Integer>> task = () -> {
-            Value out = run.execute((Object) tc.input().toArray(new Integer[0]));
+    private CaseOutcome runCase(ExecutorService executor, Value run, JudgeSpec spec, TestCase tc) {
+        Callable<Object> task = () -> {
+            Value out = run.execute(tc.input().toString());
+            if (spec.result() == JudgeSpec.ResultKind.BOOLEAN) {
+                if (!out.isBoolean()) throw new IllegalStateException(spec.method() + " must return true or false");
+                return out.asBoolean();
+            }
+            if (spec.result() == JudgeSpec.ResultKind.INT) {
+                if (!out.isNumber() || !out.fitsInInt()) throw new IllegalStateException(spec.method() + " must return an integer");
+                return out.asInt();
+            }
             List<Integer> actual = new ArrayList<>();
             for (long i = 0; i < out.getArraySize(); i++) {
                 actual.add(out.getArrayElement(i).asInt());
@@ -129,10 +146,10 @@ public class JavaScriptJudge {
             return actual;
         };
 
-        Future<List<Integer>> future = executor.submit(task);
+        Future<Object> future = executor.submit(task);
         try {
-            List<Integer> actual = future.get(TIMEOUT_MS, TimeUnit.MILLISECONDS);
-            boolean passed = actual.equals(tc.expected());
+            Object actual = future.get(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            boolean passed = Objects.equals(actual, tc.expected());
             return new CaseOutcome(new SubmitResult.CaseResult(
                     passed, tc.input(), tc.expected(), actual, null));
         } catch (TimeoutException e) {

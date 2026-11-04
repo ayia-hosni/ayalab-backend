@@ -1,11 +1,21 @@
 package com.ayalab.entity;
 
+import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.MapKeyColumn;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.BatchSize;
+
+import java.util.HashMap;
+import java.util.Map;
 
 @Entity
 @Table(name = "lessons")
@@ -15,6 +25,10 @@ public class Lesson {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /** Public URL identifier, e.g. "linked-list-basics". */
+    @Column(nullable = false, unique = true)
+    private String slug;
+
     /** Position among all lessons; determines display order. */
     @Column(nullable = false)
     private int ordinal;
@@ -23,62 +37,43 @@ public class Lesson {
     @Column(nullable = false)
     private String icon;
 
-    @Column(name = "title_en", nullable = false, columnDefinition = "text")
-    private String titleEn;
+    @Column(nullable = false)
+    private boolean published = true;
 
-    @Column(name = "title_ar", nullable = false, columnDefinition = "text")
-    private String titleAr;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "section_id")
+    private LessonSection section;
 
-    @Column(name = "description_en", nullable = false, columnDefinition = "text")
-    private String descriptionEn;
+    /** Null means uncategorized within the section. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "category_id")
+    private LessonCategory category;
 
-    @Column(name = "description_ar", nullable = false, columnDefinition = "text")
-    private String descriptionAr;
+    @ElementCollection(fetch = FetchType.LAZY)
+    @CollectionTable(name = "lesson_i18n", joinColumns = @JoinColumn(name = "lesson_id"))
+    @MapKeyColumn(name = "locale")
+    @BatchSize(size = 50)
+    private Map<String, LessonText> translations = new HashMap<>();
 
-    /** Topic group, e.g. "Linked Lists" — every lesson belongs to one. */
-    @Column(name = "section_en", nullable = false, columnDefinition = "text")
-    private String sectionEn;
+    public Long getId()                              { return id; }
+    public String getSlug()                          { return slug; }
+    public int getOrdinal()                          { return ordinal; }
+    public String getIcon()                          { return icon; }
+    public boolean isPublished()                     { return published; }
+    public LessonSection getSection()                { return section; }
+    public LessonCategory getCategory()              { return category; }
+    public Map<String, LessonText> getTranslations() { return translations; }
 
-    @Column(name = "section_ar", nullable = false, columnDefinition = "text")
-    private String sectionAr;
+    public void setSlug(String slug)                 { this.slug = slug; }
+    public void setOrdinal(int ordinal)              { this.ordinal = ordinal; }
+    public void setIcon(String icon)                 { this.icon = icon; }
+    public void setPublished(boolean published)      { this.published = published; }
+    public void setSection(LessonSection section)    { this.section = section; }
+    public void setCategory(LessonCategory category) { this.category = category; }
 
-    /** Optional sub-tag within the section, e.g. "Insertion"; null means uncategorized. */
-    @Column(name = "category_en", columnDefinition = "text")
-    private String categoryEn;
-
-    @Column(name = "category_ar", columnDefinition = "text")
-    private String categoryAr;
-
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
-
-    public int getOrdinal() { return ordinal; }
-    public void setOrdinal(int ordinal) { this.ordinal = ordinal; }
-
-    public String getIcon() { return icon; }
-    public void setIcon(String icon) { this.icon = icon; }
-
-    public String getTitleEn() { return titleEn; }
-    public void setTitleEn(String titleEn) { this.titleEn = titleEn; }
-
-    public String getTitleAr() { return titleAr; }
-    public void setTitleAr(String titleAr) { this.titleAr = titleAr; }
-
-    public String getDescriptionEn() { return descriptionEn; }
-    public void setDescriptionEn(String descriptionEn) { this.descriptionEn = descriptionEn; }
-
-    public String getDescriptionAr() { return descriptionAr; }
-    public void setDescriptionAr(String descriptionAr) { this.descriptionAr = descriptionAr; }
-
-    public String getSectionEn() { return sectionEn; }
-    public void setSectionEn(String sectionEn) { this.sectionEn = sectionEn; }
-
-    public String getSectionAr() { return sectionAr; }
-    public void setSectionAr(String sectionAr) { this.sectionAr = sectionAr; }
-
-    public String getCategoryEn() { return categoryEn; }
-    public void setCategoryEn(String categoryEn) { this.categoryEn = categoryEn; }
-
-    public String getCategoryAr() { return categoryAr; }
-    public void setCategoryAr(String categoryAr) { this.categoryAr = categoryAr; }
+    /** Replaces all translations in place (keeps the Hibernate-managed map instance). */
+    public void replaceTranslations(Map<String, LessonText> next) {
+        translations.clear();
+        translations.putAll(next);
+    }
 }

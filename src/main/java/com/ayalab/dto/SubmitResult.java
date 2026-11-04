@@ -26,14 +26,14 @@ public record SubmitResult(
             @Schema(description = "Whether this test case passed")
             boolean passed,
 
-            @Schema(description = "Input values for this test case")
-            List<Integer> input,
+            @Schema(description = "Input for this test case: a list, a [list, int] pair, or an int, depending on the problem")
+            Object input,
 
-            @Schema(description = "Expected output")
-            List<Integer> expected,
+            @Schema(description = "Expected output: a list of integers, or a boolean for yes/no problems")
+            Object expected,
 
-            @Schema(description = "Actual output produced by the submission")
-            List<Integer> actual,
+            @Schema(description = "Actual output produced by the submission (same shape as expected)")
+            Object actual,
 
             @Schema(description = "Runtime error message for this case, null if none")
             String error

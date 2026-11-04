@@ -16,11 +16,12 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Compiles and executes a user-supplied Java {@code Solution.reverseList(head)}
- * implementation against a list of test cases.
+ * Compiles and executes a user-supplied Java {@code Solution} method (named by the
+ * {@link JudgeSpec}) that takes a linked-list head, against a list of test cases.
  *
  * <p>Unlike {@link JavaScriptJudge}, there is no equivalent to a GraalVM
  * polyglot sandbox for compiled Java bytecode on the JVM (the {@code
@@ -91,17 +92,9 @@ public class JavaJudge {
                     Solution sol = new Solution();
                     for (int i = 0; i < n; i++) {
                         String line = br.readLine();
+                        if (line == null) line = "";
                         try {
-                            int[] arr = parseInts(line == null ? "" : line);
-                            ListNode head = fromArray(arr);
-                            ListNode res = sol.reverseList(head);
-                            List<Integer> out = toList(res);
-                            StringBuilder sb = new StringBuilder();
-                            for (int j = 0; j < out.size(); j++) {
-                                if (j > 0) sb.append(',');
-                                sb.append(out.get(j));
-                            }
-                            System.out.println(sb);
+                            //__CALL__
                         } catch (Throwable t) {
                             String msg = t.getMessage();
                             System.out.println("__ERROR__:" + t.getClass().getSimpleName() + (msg != null ? (": " + msg) : ""));
@@ -111,7 +104,53 @@ public class JavaJudge {
             }
             """;
 
-    public SubmitResult run(String userCode, List<TestCase> cases) {
+    /**
+     * Generated per problem and spliced into the harness at {@code //__CALL__}: parse this case's
+     * stdin line into the method's arguments, call it, and print the result on one line.
+     */
+    private static String callSnippet(JudgeSpec spec) {
+        String parse = switch (spec.args()) {
+            case LIST -> "ListNode head = fromArray(parseInts(line));";
+            case LIST_AND_INT -> "String[] parts = line.split(\"[|]\", -1);"
+                    + " ListNode head = fromArray(parseInts(parts[0]));"
+                    + " int val = Integer.parseInt(parts[1].trim());";
+            case INT -> "int arg0 = Integer.parseInt(line.trim());";
+        };
+        String args = switch (spec.args()) {
+            case LIST -> "head";
+            case LIST_AND_INT -> "head, val";
+            case INT -> "arg0";
+        };
+        String call = "sol." + spec.method() + "(" + args + ")";
+        String print = switch (spec.result()) {
+            case LIST -> "ListNode res = " + call + ";"
+                    + " List<Integer> out = toList(res);"
+                    + " StringBuilder sb = new StringBuilder();"
+                    + " for (int j = 0; j < out.size(); j++) { if (j > 0) sb.append(','); sb.append(out.get(j)); }"
+                    + " System.out.println(sb);";
+            case BOOLEAN -> "boolean res = " + call + "; System.out.println(res ? \"true\" : \"false\");";
+            case INT -> "int res = " + call + "; System.out.println(res);";
+        };
+        return parse + " " + print;
+    }
+
+    /** One stdin line for a test case, in the form the generated harness parses for this spec. */
+    private static String stdinLine(JudgeSpec spec, TestCase tc) {
+        return switch (spec.args()) {
+            case LIST -> csv((List<?>) tc.input());
+            case LIST_AND_INT -> {
+                List<?> pair = (List<?>) tc.input();
+                yield csv((List<?>) pair.get(0)) + "|" + pair.get(1);
+            }
+            case INT -> String.valueOf(tc.input());
+        };
+    }
+
+    private static String csv(List<?> values) {
+        return values.toString().replaceAll("[\\[\\] ]", "");
+    }
+
+    public SubmitResult run(String userCode, JudgeSpec spec, List<TestCase> cases) {
         long start = System.nanoTime();
         Path workDir;
         try {
@@ -122,7 +161,7 @@ public class JavaJudge {
 
         try {
             Path source = workDir.resolve("Main.java");
-            Files.writeString(source, HARNESS_PREFIX + userCode + HARNESS_SUFFIX, StandardCharsets.UTF_8);
+            Files.writeString(source, HARNESS_PREFIX + userCode + HARNESS_SUFFIX.replace("//__CALL__", callSnippet(spec)), StandardCharsets.UTF_8);
 
             String javaHome = System.getProperty("java.home");
             String javac = javaHome + File.separator + "bin" + File.separator + "javac";
@@ -142,7 +181,7 @@ public class JavaJudge {
             StringBuilder stdin = new StringBuilder();
             stdin.append(cases.size()).append('\n');
             for (TestCase tc : cases) {
-                stdin.append(tc.input().toString().replaceAll("[\\[\\] ]", "")).append('\n');
+                stdin.append(stdinLine(spec, tc)).append('\n');
             }
 
             ProcessResult run = runProcess(
@@ -184,8 +223,16 @@ public class JavaJudge {
                     results.add(new SubmitResult.CaseResult(false, tc.input(), tc.expected(), null, line.substring(ERROR_PREFIX.length())));
                     continue;
                 }
-                List<Integer> actual = parseCsvInts(line);
-                boolean passed = actual.equals(tc.expected());
+                Object actual;
+                try {
+                    actual = parseOutput(line, spec.result());
+                } catch (RuntimeException e) {
+                    allPassed = false;
+                    results.add(new SubmitResult.CaseResult(false, tc.input(), tc.expected(), null,
+                            "Unexpected output: " + line));
+                    continue;
+                }
+                boolean passed = Objects.equals(actual, tc.expected());
                 if (!passed) allPassed = false;
                 results.add(new SubmitResult.CaseResult(passed, tc.input(), tc.expected(), actual, null));
             }
@@ -197,6 +244,17 @@ public class JavaJudge {
         } finally {
             deleteRecursively(workDir);
         }
+    }
+
+    private Object parseOutput(String line, JudgeSpec.ResultKind kind) {
+        return switch (kind) {
+            case LIST -> parseCsvInts(line);
+            case INT -> Integer.parseInt(line.trim());
+            case BOOLEAN -> {
+                if (!line.equals("true") && !line.equals("false")) throw new IllegalArgumentException(line);
+                yield Boolean.parseBoolean(line);
+            }
+        };
     }
 
     private List<Integer> parseCsvInts(String line) {

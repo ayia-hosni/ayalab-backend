@@ -1,11 +1,23 @@
 package com.ayalab.entity;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.MapKeyColumn;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.BatchSize;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
+import java.util.HashMap;
+import java.util.Map;
 
 @Entity
 @Table(name = "lesson_slides")
@@ -22,68 +34,34 @@ public class LessonSlide {
     @Column(nullable = false)
     private int ordinal;
 
-    @Column(name = "kicker_en", nullable = false, columnDefinition = "text")
-    private String kickerEn;
+    /** Structured diagram description; discriminated by its {@code kind} field. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(nullable = false, columnDefinition = "jsonb")
+    private JsonNode spec;
 
-    @Column(name = "kicker_ar", nullable = false, columnDefinition = "text")
-    private String kickerAr;
+    @ElementCollection(fetch = FetchType.LAZY)
+    @CollectionTable(name = "lesson_slide_i18n", joinColumns = @JoinColumn(name = "slide_id"))
+    @MapKeyColumn(name = "locale")
+    @BatchSize(size = 100)
+    private Map<String, SlideText> translations = new HashMap<>();
 
-    @Column(name = "title_en", nullable = false, columnDefinition = "text")
-    private String titleEn;
+    protected LessonSlide() {}
 
-    @Column(name = "title_ar", nullable = false, columnDefinition = "text")
-    private String titleAr;
-
-    /** Raw HTML for the slide's diagram/illustration. */
-    @Column(nullable = false, columnDefinition = "text")
-    private String visual;
-
-    /** Structured builder spec (JSON) that generated `visual`; null for slides authored as raw HTML. */
-    @Column(name = "visual_spec", columnDefinition = "text")
-    private String visualSpec;
-
-    @Column(name = "body_en", nullable = false, columnDefinition = "text")
-    private String bodyEn;
-
-    @Column(name = "body_ar", nullable = false, columnDefinition = "text")
-    private String bodyAr;
-
-    public LessonSlide() {}
-
-    public LessonSlide(Long lessonId, int ordinal, String kickerEn, String kickerAr,
-                        String titleEn, String titleAr, String visual, String visualSpec, String bodyEn, String bodyAr) {
-        this.lessonId   = lessonId;
-        this.ordinal    = ordinal;
-        this.kickerEn   = kickerEn;
-        this.kickerAr   = kickerAr;
-        this.titleEn    = titleEn;
-        this.titleAr    = titleAr;
-        this.visual     = visual;
-        this.visualSpec = visualSpec;
-        this.bodyEn     = bodyEn;
-        this.bodyAr     = bodyAr;
+    public LessonSlide(Long lessonId) {
+        this.lessonId = lessonId;
     }
 
-    public Long getId()            { return id; }
-    public Long getLessonId()      { return lessonId; }
-    public int getOrdinal()        { return ordinal; }
-    public String getKickerEn()    { return kickerEn; }
-    public String getKickerAr()    { return kickerAr; }
-    public String getTitleEn()     { return titleEn; }
-    public String getTitleAr()     { return titleAr; }
-    public String getVisual()      { return visual; }
-    public String getVisualSpec()  { return visualSpec; }
-    public String getBodyEn()      { return bodyEn; }
-    public String getBodyAr()      { return bodyAr; }
+    public Long getId()                             { return id; }
+    public Long getLessonId()                       { return lessonId; }
+    public int getOrdinal()                         { return ordinal; }
+    public JsonNode getSpec()                       { return spec; }
+    public Map<String, SlideText> getTranslations() { return translations; }
 
-    public void setLessonId(Long lessonId)     { this.lessonId = lessonId; }
-    public void setOrdinal(int ordinal)        { this.ordinal = ordinal; }
-    public void setKickerEn(String kickerEn)   { this.kickerEn = kickerEn; }
-    public void setKickerAr(String kickerAr)   { this.kickerAr = kickerAr; }
-    public void setTitleEn(String titleEn)     { this.titleEn = titleEn; }
-    public void setTitleAr(String titleAr)     { this.titleAr = titleAr; }
-    public void setVisual(String visual)       { this.visual = visual; }
-    public void setVisualSpec(String v)        { this.visualSpec = v; }
-    public void setBodyEn(String bodyEn)       { this.bodyEn = bodyEn; }
-    public void setBodyAr(String bodyAr)       { this.bodyAr = bodyAr; }
+    public void setOrdinal(int ordinal) { this.ordinal = ordinal; }
+    public void setSpec(JsonNode spec)  { this.spec = spec; }
+
+    public void replaceTranslations(Map<String, SlideText> next) {
+        translations.clear();
+        translations.putAll(next);
+    }
 }
