@@ -24,8 +24,6 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
 
-            mvn clean package -DskipTests
-
             docker compose up -d --build
 
             docker image prune -f
